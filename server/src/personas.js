@@ -141,6 +141,7 @@ export const PERSONAS = [
       'Hello... hold on, let me turn this down. There. Hello?',
     ],
     fillers: ['Oh my.', 'Well now.', 'Hold on, hold on.', 'Let me see here.', 'Oh dear.'],
+    backchannels: ['Mhm.', 'Oh.', 'Uh huh.', 'Oh my.', 'I see.', 'Mm.'],
     obstacles: {
       glasses: /glasses|reading specs|spectacles/i,
       'the cat': /biscuits|the cat\b/i,
@@ -201,6 +202,7 @@ plausible ways — fifteen becomes fifty, five becomes nine. You apologize a lot
       'Yello. Yeah, hi, is this the pizza place?',
     ],
     fillers: ['Uh huh.', 'Okay, okay.', 'Right, right.', 'Sure, yeah.', 'Gotcha.'],
+    backchannels: ['Uh huh.', 'Yeah.', 'Oh.', 'Sure.', 'Okay.', 'Mm hm.'],
     obstacles: {
       'the porch': /porch|front step|driveway/i,
       'the dog': /wendell|the dog\b/i,
@@ -258,6 +260,7 @@ SPEECH: chipper, flat vowels, "ope", "you betcha", "no yeah". Short sentences.
       'Hey, yeah? Who is this?',
     ],
     fillers: ['Wait.', 'Okay so.', 'Hold on, hold on.', 'Right, yeah, no.', 'Uh...'],
+    backchannels: ['Uh huh.', 'Wait.', 'Okay.', 'Yeah.', 'Mm.', 'Right.'],
     obstacles: {
       'his roommate': /prakash|roommate/i,
       'the laptop': /laptop|my computer|the fan/i,
@@ -315,6 +318,7 @@ sentences over. You trail off because something happened in the room.
       'Hey! Hi. Hold on, let me get to a quieter spot.',
     ],
     fillers: ['Oh, honey.', 'Bless your heart.', 'Now hold on.', 'Well, I declare.', 'Mm, okay.'],
+    backchannels: ['Mm hm.', 'Oh.', 'I hear you.', 'Well.', 'Uh huh.', 'Mercy.'],
     obstacles: {
       'her purse': /purse|pocketbook/i,
       'the church van': /church van|the van\b/i,

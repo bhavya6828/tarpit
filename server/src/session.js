@@ -1,8 +1,15 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { DeepgramStream } from './deepgram.js';
-import { ElevenLabsStream, createVoice } from './elevenlabs.js';
-import { openai, streamPersonaReply, pick, stripAudioTags, chunkForSpeech } from './brain.js';
+import { ElevenLabsStream, createVoice, speakCached } from './elevenlabs.js';
+import {
+  openai,
+  streamPersonaReply,
+  pick,
+  stripAudioTags,
+  chunkForSpeech,
+  backchannelDue,
+} from './brain.js';
 import { getPersona, DEFAULT_PERSONA } from './personas.js';
 import { extractIntel, detectSignals, enrichIntel } from './intel.js';
 import { store } from './elastic.js';
@@ -75,6 +82,9 @@ export class Session extends EventEmitter {
     this.pendingUtterance = '';
     this.muteWhileSpeaking = false;
     this.lastTactics = [];
+    this.callerSpeakingSince = 0;
+    this.lastBackchannelAt = 0;
+    this.backchannelCount = 0;
 
     this.metricsTimer = null;
     this.idleTimer = null;
@@ -226,10 +236,16 @@ export class Session extends EventEmitter {
     if (this.status !== 'live') return;
 
     if (!isFinal) {
+      if (!this.callerSpeakingSince) this.callerSpeakingSince = Date.now();
       this.emit('event', { type: 'transcript_partial', speaker: 'scammer', text });
       this.#maybeBargeIn(text);
+      this.#maybeBackchannel();
       return;
     }
+
+    // Their turn ended, so the listening window starts again on the next one.
+    this.callerSpeakingSince = 0;
+    this.backchannelCount = 0;
 
     this.pendingUtterance = `${this.pendingUtterance} ${text}`.trim();
     this.#armIdleTimer();
@@ -265,6 +281,47 @@ export class Session extends EventEmitter {
     this.interruptions++;
     this.#cancelAgentTurn();
     this.emit('event', { type: 'interrupted', turnId: this.turnId, interruptions: this.interruptions });
+  }
+
+  /**
+   * A listening noise while the caller is still talking.
+   *
+   * This deliberately takes no turn: it does not set agentSpeaking, advance
+   * turnId, or cancel anything. A backchannel that behaved like a reply would
+   * suppress barge-in and talk over the persona's own answer.
+   */
+  async #maybeBackchannel() {
+    const now = Date.now();
+    const due = backchannelDue(
+      {
+        speakingSince: this.callerSpeakingSince,
+        lastAt: this.lastBackchannelAt,
+        count: this.backchannelCount,
+        agentSpeaking: this.agentSpeaking,
+        turnInFlight: this.turnInFlight,
+      },
+      now
+    );
+    if (!due) return;
+
+    this.lastBackchannelAt = now;
+    this.backchannelCount++;
+
+    try {
+      const phrase = this.dependencies.pick(this.persona.backchannels || ['Mhm.']);
+      const pcm = await speakCached({
+        voiceId: this.persona.voiceId,
+        voiceSettings: this.persona.voiceSettings,
+        text: phrase,
+        transport: this.transport,
+      });
+      // Conditions can change while the audio is being fetched.
+      if (this.status !== 'live' || this.agentSpeaking) return;
+      this.emit('audio', { turnId: this.turnId, pcm });
+      this.emit('event', { type: 'backchannel', text: phrase });
+    } catch {
+      // A missing listening noise is never worth failing a call over.
+    }
   }
 
   #flushTurn(cause) {

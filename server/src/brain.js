@@ -42,6 +42,27 @@ export function recentOpeners(history, limit = 4) {
   );
 }
 
+// Listening noises are cheap and constant in real speech, but a bot that grunts
+// every second is worse than one that stays quiet.
+export const BACKCHANNEL_AFTER_MS = 2500;
+export const BACKCHANNEL_GAP_MS = 4000;
+export const BACKCHANNEL_MAX_PER_TURN = 2;
+
+/**
+ * Should the persona make a listening noise right now?
+ *
+ * Pure so the thresholds can be tested without a live call.
+ */
+export function backchannelDue(state, now) {
+  const { speakingSince, lastAt = 0, count = 0, agentSpeaking, turnInFlight } = state || {};
+  if (!speakingSince) return false;
+  if (agentSpeaking || turnInFlight) return false;
+  if (count >= BACKCHANNEL_MAX_PER_TURN) return false;
+  if (now - speakingSince < BACKCHANNEL_AFTER_MS) return false;
+  if (lastAt && now - lastAt < BACKCHANNEL_GAP_MS) return false;
+  return true;
+}
+
 /** Which of this persona's stock excuses have already been used aloud. */
 export function spentObstacles(persona, history) {
   const said = (history || [])

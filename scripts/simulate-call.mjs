@@ -71,6 +71,8 @@ let audioFrames = 0;
 // is the number the caller actually feels, and the one ElevenLabs judges on.
 let callerStoppedAt = 0;
 let awaitingReply = false;
+// A listening noise is not a reply, so only audio after audio_start counts.
+let replyStarted = false;
 const responseTimes = [];
 
 ws.on('error', (e) => {
@@ -109,9 +111,22 @@ ws.on('message', (d, isBinary) => {
   if (isBinary) {
     audioBytes += d.length;
     audioFrames++;
-    if (awaitingReply) {
-      awaitingReply = false;
+    if (awaitingReply && replyStarted) {
       const ms = Date.now() - callerStoppedAt;
+      // A caller who keeps talking produces several finals while one reply is
+      // still being generated, so audio can land microseconds after a later
+      // final while belonging to an earlier turn. Those are carryover, not a
+      // response, and counting them would flatter the number.
+      // Carryover from a turn that was already in flight. Abandon this
+      // measurement rather than leaving it open, or the next listening noise
+      // gets counted as the response seconds later.
+      if (ms < 150) {
+        awaitingReply = false;
+        replyStarted = false;
+        return;
+      }
+      awaitingReply = false;
+      replyStarted = false;
       responseTimes.push(ms);
       console.log(`${ts()}   \u23f1 first audio ${ms}ms after caller stopped`);
     }
@@ -123,6 +138,7 @@ ws.on('message', (d, isBinary) => {
       if (e.speaker === 'scammer') {
         callerStoppedAt = Date.now();
         awaitingReply = true;
+        replyStarted = false;
       }
       console.log(`${ts()} ${e.speaker === 'scammer' ? '◀ CALLER' : '▶ PERSONA'}: ${e.text}`);
       break;
@@ -136,6 +152,12 @@ ws.on('message', (d, isBinary) => {
       break;
     case 'enrichment':
       console.log(`${ts()}   ⊞ ${JSON.stringify(e.enrichment)}`);
+      break;
+    case 'audio_start':
+      replyStarted = true;
+      break;
+    case 'backchannel':
+      console.log(`${ts()}   \u266a "${e.text}"  (listening while they talk)`);
       break;
     case 'interrupted':
       console.log(`${ts()}   ✂ barge-in`);

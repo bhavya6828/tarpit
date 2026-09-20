@@ -432,6 +432,43 @@ export function createVoice(options) {
     : new ElevenLabsBatch(options);
 }
 
+/**
+ * Audio for a fixed phrase, from disk after the first use.
+ *
+ * Backchannels and fillers are a small closed set of short strings, so they are
+ * worth caching outright. A listening noise that arrives a second late is not a
+ * listening noise.
+ */
+export async function speakCached({ voiceId, voiceSettings, text, transport = 'browser' }) {
+  const outputFormat = (TRANSPORTS[transport] || TRANSPORTS.browser).tts.outputFormat;
+  const file = path.join(FILLER_DIR, fillerCacheKey(voiceId, config.elevenlabs.model, outputFormat, text));
+
+  try {
+    return fs.readFileSync(file);
+  } catch {
+    // not cached yet
+  }
+
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=${outputFormat}`,
+    {
+      method: 'POST',
+      headers: { 'xi-api-key': config.elevenlabs.key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, model_id: config.elevenlabs.model, voice_settings: voiceSettings }),
+    }
+  );
+  if (!res.ok) throw new Error(`ElevenLabs ${res.status}`);
+
+  const { emit } = alignSamples(Buffer.from(await res.arrayBuffer()), EMPTY, bytesPerSample(outputFormat));
+  try {
+    fs.mkdirSync(FILLER_DIR, { recursive: true });
+    fs.writeFileSync(file, emit);
+  } catch {
+    // a cold cache is slower, never fatal
+  }
+  return emit;
+}
+
 /** Non-streaming helper for one-shot lines (session openers, pre-roll fillers). */
 export async function synthesizeOnce(voiceId, text, voiceSettings, transport = 'browser') {
   const fmt = (TRANSPORTS[transport] || TRANSPORTS.browser).tts.outputFormat;
