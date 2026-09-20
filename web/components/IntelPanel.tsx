@@ -98,7 +98,7 @@ export default function IntelPanel({
       >
         {intel.length === 0 ? (
           <div className="mx-auto max-w-xs px-6 py-12 text-center">
-            <p className="font-serif text-xl tracking-[-0.02em] text-text">No evidence captured yet</p>
+            <p className="display text-xl text-text">No evidence captured yet</p>
             <p className="mt-2 text-sm leading-relaxed text-muted">
               Payment details, callback numbers, and infrastructure appear here after validation.
             </p>

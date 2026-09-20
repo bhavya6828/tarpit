@@ -95,7 +95,7 @@ export default function CaseFile({
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-4 py-4 sm:px-6">
           <div>
             <p className="label">Referral package</p>
-            <h2 id="case-file-title" className="mt-1 font-serif text-2xl tracking-[-0.03em] text-text">
+            <h2 id="case-file-title" className="mt-1 display text-2xl text-text">
               {data?.case_id || 'Building case file'}
             </h2>
           </div>

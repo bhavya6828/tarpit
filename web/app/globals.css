@@ -23,9 +23,10 @@
   --color-info: #5aa9ff;
   --color-info-soft: #101f31;
 
-  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "Inter", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "SFMono-Regular", "JetBrains Mono", Consolas, monospace;
+  --font-sans: var(--font-inter), "Helvetica Neue", Arial, sans-serif;
+  /* No serif in a console. "Display" is Inter, tightened. */
+  --font-serif: var(--font-inter), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-jetbrains), "SFMono-Regular", Consolas, monospace;
 }
 
 * {
@@ -89,6 +90,17 @@ input:focus-visible {
   .tnum {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
+  }
+
+  /* Replaces the serif the warm theme used for headings. */
+  .display {
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+
+  /* Readable text on the accent, which is a bright green and cannot take white. */
+  .on-accent {
+    color: #05221a;
   }
 
   /* The number judges read from across the room. */

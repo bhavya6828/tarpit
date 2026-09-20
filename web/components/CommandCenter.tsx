@@ -60,12 +60,12 @@ export default function CommandCenter() {
       <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col px-4 py-4 sm:px-5 xl:h-screen xl:min-h-0 xl:px-6">
         <header className="flex shrink-0 flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent font-serif text-lg text-white">
-              T
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-lg font-bold on-accent">
+              H
             </div>
             <div className="min-w-0">
               <div className="flex items-baseline gap-2">
-                <h1 className="font-serif text-2xl tracking-[-0.04em] text-text">Honeypot</h1>
+                <h1 className="display text-2xl text-text">Honeypot AI</h1>
                 <span className="hidden text-xs text-muted md:inline">Scam call defense</span>
               </div>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
@@ -90,7 +90,7 @@ export default function CommandCenter() {
               onClick={() => (live ? honeypot.stop() : honeypot.start(selected))}
               disabled={unavailable}
               className={`flex-1 rounded-md px-4 py-2.5 text-sm font-semibold transition-transform active:scale-[0.98] sm:flex-none ${
-                live ? 'bg-danger text-white' : 'bg-accent text-white'
+                live ? 'bg-danger text-white' : 'bg-accent on-accent'
               } disabled:cursor-not-allowed disabled:opacity-35`}
             >
               {live ? 'End engagement' : 'Start engagement'}
@@ -237,7 +237,7 @@ function MobileTab({
       aria-controls={controls}
       tabIndex={active ? 0 : -1}
       onClick={onClick}
-      className={`min-h-10 rounded-md px-3 py-2 text-xs font-semibold ${active ? 'bg-accent text-white' : 'text-muted hover:text-text'}`}
+      className={`min-h-10 rounded-md px-3 py-2 text-xs font-semibold ${active ? 'bg-accent on-accent' : 'text-muted hover:text-text'}`}
     >
       {children}
     </button>

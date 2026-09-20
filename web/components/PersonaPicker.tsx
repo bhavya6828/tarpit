@@ -26,7 +26,7 @@ export default function PersonaPicker({
             title={`${persona.name}, age ${persona.age}: ${persona.tagline}`}
             className={`min-h-20 rounded-lg border p-3 text-left transition-colors ${
               selected
-                ? 'border-text bg-text text-white'
+                ? 'border-accent bg-accent on-accent'
                 : 'border-border bg-surface text-text hover:border-border-strong hover:bg-surface-subtle'
             }`}
           >
@@ -38,7 +38,7 @@ export default function PersonaPicker({
                 </span>
               )}
             </span>
-            <span className={`mt-1 block text-[11px] leading-snug ${selected ? 'text-white/70' : 'text-muted'}`}>
+            <span className={`mt-1 block text-[11px] leading-snug ${selected ? 'text-[#05221a]/75' : 'text-muted'}`}>
               {persona.tagline}
             </span>
           </button>

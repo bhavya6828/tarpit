@@ -50,10 +50,10 @@ export default function Transcript({
       >
         {lines.length === 0 && !partial && !agentLive && (
           <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center py-16 text-center">
-            <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-canvas font-serif text-xl text-text">
+            <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-canvas display text-xl text-text">
               T
             </span>
-            <h3 className="font-serif text-2xl tracking-[-0.03em] text-text">Ready when you are</h3>
+            <h3 className="display text-2xl text-text">Ready when you are</h3>
             <p className="mt-3 text-sm leading-relaxed text-muted">
               Start an engagement, speak through the microphone, or type a caller message below.
             </p>
@@ -93,7 +93,7 @@ export default function Transcript({
           <button
             type="submit"
             disabled={!live || !draft.trim()}
-            className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
+            className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold on-accent transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
           >
             Send
           </button>
