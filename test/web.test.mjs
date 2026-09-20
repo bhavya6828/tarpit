@@ -125,7 +125,7 @@ test('referral package is exposed as an accessible dialog', () => {
 });
 
 test('frontend integrates reconnect and safe frame helpers', () => {
-  const source = readWebFile('lib/useTarpit.ts');
+  const source = readWebFile('lib/useHoneypot.ts');
 
   assert.match(source, /reconnectDelay/);
   assert.match(source, /parseSocketMessage/);
@@ -134,7 +134,7 @@ test('frontend integrates reconnect and safe frame helpers', () => {
 });
 
 test('frontend HTTP effects abort stale requests', () => {
-  const hook = readWebFile('lib/useTarpit.ts');
+  const hook = readWebFile('lib/useHoneypot.ts');
   const intel = readWebFile('components/IntelPanel.tsx');
   const report = readWebFile('components/CaseFile.tsx');
 

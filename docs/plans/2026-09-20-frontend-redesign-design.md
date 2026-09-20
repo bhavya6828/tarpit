@@ -2,7 +2,7 @@
 
 ## Direction
 
-Tarpit will use a calm incident workspace instead of the current retro command
+Honeypot AI will use a calm incident workspace instead of the current retro command
 center. The interface should feel like a dependable case-management tool used during
 a live call. A warm paper canvas, white surfaces, charcoal text, subtle borders, and
 small semantic color accents establish hierarchy without visual noise. The product
@@ -18,7 +18,7 @@ Conversation because it is the primary live task.
 
 ## Components and data
 
-`CommandCenter` remains the state owner and passes the existing `useTarpit` data into
+`CommandCenter` remains the state owner and passes the existing `useHoneypot` data into
 the same feature components. The redesign changes composition and presentation, not
 the WebSocket protocol or domain logic. `PersonaPicker` becomes a compact, readable
 choice group. `MetricsRail`, `Transcript`, and `IntelPanel` use shared surface,

@@ -104,7 +104,7 @@ beforeEach(() => {
 test('buildCaseFile returns a complete correlated case file', async () => {
   const file = await buildCaseFile(sessionId);
 
-  assert.equal(file.case_id, 'TARPIT-REPORT-1');
+  assert.equal(file.case_id, 'HONEYPOT-REPORT-1');
   assert.equal(file.engagement.persona_deployed, 'Harold Pemberton (harold)');
   assert.equal(file.artifacts.total, 4);
   assert.equal(file.artifacts.validated, 2);

@@ -12,13 +12,13 @@ test('server URLs follow explicit and page security', () => {
     http: 'http://localhost:8787',
     ws: 'ws://localhost:8787/ws',
   });
-  assert.deepEqual(resolveServerUrls('api.tarpit.test', 'https:'), {
-    http: 'https://api.tarpit.test',
-    ws: 'wss://api.tarpit.test/ws',
+  assert.deepEqual(resolveServerUrls('api.honeypot.test', 'https:'), {
+    http: 'https://api.honeypot.test',
+    ws: 'wss://api.honeypot.test/ws',
   });
-  assert.deepEqual(resolveServerUrls('https://secure.tarpit.test', 'http:'), {
-    http: 'https://secure.tarpit.test',
-    ws: 'wss://secure.tarpit.test/ws',
+  assert.deepEqual(resolveServerUrls('https://secure.honeypot.test', 'http:'), {
+    http: 'https://secure.honeypot.test',
+    ws: 'wss://secure.honeypot.test/ws',
   });
 });
 

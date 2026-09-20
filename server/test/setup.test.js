@@ -8,7 +8,7 @@ test('environment template lists supported settings without secrets', async () =
   const contents = await readFile(rootFile('.env.example'), 'utf8');
   const expected = [
     'PORT',
-    'TARPIT_ACCESS_TOKEN',
+    'HONEYPOT_ACCESS_TOKEN',
     'MAX_CONCURRENT_SESSIONS',
     'MAX_SESSION_MINUTES',
     'PROVIDER_TIMEOUT_MS',
@@ -37,8 +37,8 @@ test('environment template lists supported settings without secrets', async () =
     'VOICE_DALE',
     'VOICE_KEVIN',
     'VOICE_BRENDA',
-    'NEXT_PUBLIC_TARPIT_SERVER',
-    'NEXT_PUBLIC_TARPIT_TOKEN',
+    'NEXT_PUBLIC_HONEYPOT_SERVER',
+    'NEXT_PUBLIC_HONEYPOT_TOKEN',
   ];
   const entries = new Map(
     contents

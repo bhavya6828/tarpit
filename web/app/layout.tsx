@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Tarpit | Scam call defense',
+  title: 'Honeypot | Scam call defense',
   description: 'A live workspace for containing scam calls and collecting actionable evidence.',
 };
 

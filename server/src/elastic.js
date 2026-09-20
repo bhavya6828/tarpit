@@ -4,9 +4,9 @@ import path from 'node:path';
 import { config } from './config.js';
 import { redactIntelItem, redactPaymentText } from './redact.js';
 
-const INTEL_INDEX = 'tarpit-intel';
-const SESSION_INDEX = 'tarpit-sessions';
-const UTTERANCE_INDEX = 'tarpit-utterances';
+const INTEL_INDEX = 'honeypot-intel';
+const SESSION_INDEX = 'honeypot-sessions';
+const UTTERANCE_INDEX = 'honeypot-utterances';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 

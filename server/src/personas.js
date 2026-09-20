@@ -1,5 +1,5 @@
 /**
- * Tarpit personas.
+ * Honeypot personas.
  *
  * Every prompt is engineered against one metric: seconds the scammer stays on
  * the line. The shared doctrine below is what makes them agentic rather than

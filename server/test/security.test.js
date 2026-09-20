@@ -6,7 +6,7 @@ const request = ({ address = '127.0.0.1', token, authorization, url = '/ws' } = 
   url,
   socket: { remoteAddress: address },
   headers: {
-    ...(token ? { 'x-tarpit-token': token } : {}),
+    ...(token ? { 'x-honeypot-token': token } : {}),
     ...(authorization ? { authorization } : {}),
   },
 });

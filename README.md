@@ -12,7 +12,7 @@ Each minute spent with a fake victim is a minute they cannot spend on a real one
 
 ## Solution
 
-Tarpit uses a fictional AI persona to keep scam callers busy.
+Honeypot AI uses a fictional AI persona to keep scam callers busy.
 It extracts and validates payment details, then stores threat intelligence from the call.
 
 ## Pipeline
@@ -23,7 +23,7 @@ GPT-4o hands each reply to ElevenLabs text-to-speech while the extractor validat
 ## Test locally
 
 Install dependencies with `npm run install:all`, then create `.env` with `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, and `OPENAI_API_KEY`.
-Run `npm run dev`, open `http://localhost:3000`, choose a persona, click **ARM TARPIT**, and talk or use type-to-talk.
+Run `npm run dev`, open `http://localhost:3000`, choose a persona, click **ARM HONEYPOT**, and talk or use type-to-talk.
 
 On PowerShell, use `npm.cmd run install:all`, `Copy-Item .env.example .env`, and `npm.cmd run dev` if script policy blocks `npm.ps1`.
 
@@ -50,9 +50,9 @@ Anything left blank falls back to a working default.
 `TTS_GRANULARITY` takes `reply` (default, best prosody) or `clause` (lower latency).
 `TWILIO_PERSONA` takes `harold`, `dale`, `kevin`, or `brenda`.
 
-With `TARPIT_ACCESS_TOKEN` blank, command and dispatch access is local-only.
-For a remote command center, set `TARPIT_ACCESS_TOKEN` and
-`NEXT_PUBLIC_TARPIT_TOKEN` to the same demo token before building the web app.
+With `HONEYPOT_ACCESS_TOKEN` blank, command and dispatch access is local-only.
+For a remote command center, set `HONEYPOT_ACCESS_TOKEN` and
+`NEXT_PUBLIC_HONEYPOT_TOKEN` to the same demo token before building the web app.
 This token is visible to the browser and is not production user authentication.
 
 `MAX_CONCURRENT_SESSIONS` defaults to `4`, `MAX_SESSION_MINUTES` defaults to `30`,

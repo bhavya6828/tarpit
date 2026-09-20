@@ -311,7 +311,7 @@ store.init().then(() => {
 server.listen(config.port, () => {
   const missing = missingKeys();
   console.log('');
-  console.log('  ████ TARPIT  —  autonomous scam-baiter');
+  console.log('  ████ HONEYPOT AI  —  autonomous scam-call decoy');
   console.log(`  ├─ control plane  http://localhost:${config.port}`);
   console.log(`  ├─ audio bridge   ws://localhost:${config.port}/ws`);
   console.log(`  ├─ stt            Deepgram ${config.deepgram.model}   ${config.deepgram.key ? 'ok' : 'NO KEY'}`);

@@ -20,7 +20,7 @@ import { redactIntelItem, redactPaymentText } from './redact.js';
  * Plus optional webhook dispatch, so a downstream system can receive it live.
  */
 
-const TARPIT_IDENTITY_ID = 'identity--8f1a4b2c-6d3e-4a5f-9b7c-2e1d0a9f8c3b';
+const HONEYPOT_IDENTITY_ID = 'identity--8f1a4b2c-6d3e-4a5f-9b7c-2e1d0a9f8c3b';
 
 // Which artifacts are worth putting in front of an investigator, and how they
 // map onto STIX patterns.
@@ -67,9 +67,9 @@ export async function buildCaseFile(sessionId, source = store) {
   }
 
   return {
-    case_id: `TARPIT-${String(sessionId).toUpperCase()}`,
+    case_id: `HONEYPOT-${String(sessionId).toUpperCase()}`,
     generated_at: new Date().toISOString(),
-    generated_by: 'Tarpit autonomous scam-baiting system',
+    generated_by: 'Honeypot autonomous scam-baiting system',
 
     engagement: {
       session_id: sessionId,
@@ -144,10 +144,10 @@ export function toStixBundle(caseFile) {
     {
       type: 'identity',
       spec_version: '2.1',
-      id: TARPIT_IDENTITY_ID,
+      id: HONEYPOT_IDENTITY_ID,
       created: now,
       modified: now,
-      name: 'Tarpit',
+      name: 'Honeypot',
       identity_class: 'system',
       description: 'Autonomous scam-baiting decoy and telephony threat-intel collector.',
     },
@@ -164,7 +164,7 @@ export function toStixBundle(caseFile) {
       type: 'indicator',
       spec_version: '2.1',
       id,
-      created_by_ref: TARPIT_IDENTITY_ID,
+      created_by_ref: HONEYPOT_IDENTITY_ID,
       created: item.captured_at || now,
       modified: item.captured_at || now,
       name: `${item.label}: ${item.value}`,
@@ -184,7 +184,7 @@ export function toStixBundle(caseFile) {
     type: 'report',
     spec_version: '2.1',
     id: `report--${uuid5ish(caseFile.case_id)}`,
-    created_by_ref: TARPIT_IDENTITY_ID,
+    created_by_ref: HONEYPOT_IDENTITY_ID,
     created: now,
     modified: now,
     name: `${caseFile.case_id} — ${caseFile.classification.scam_type} telephone fraud`,
@@ -193,7 +193,7 @@ export function toStixBundle(caseFile) {
       `${caseFile.artifacts.total} artifacts captured, ${caseFile.artifacts.validated} checksum-validated.`,
     report_types: ['threat-report'],
     published: now,
-    object_refs: indicatorIds.length ? indicatorIds : [TARPIT_IDENTITY_ID],
+    object_refs: indicatorIds.length ? indicatorIds : [HONEYPOT_IDENTITY_ID],
   });
 
   return { type: 'bundle', id: `bundle--${uuid5ish(`bundle:${caseFile.case_id}`)}`, objects };

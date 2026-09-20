@@ -17,7 +17,7 @@ delay, parses JSON and binary socket frames safely, and appends errors without
 duplicates. This keeps transport policy out of the React hook while avoiding a new
 state library or dependency.
 
-`useTarpit` keeps one socket lifecycle per mount. It reconnects after a close using a
+`useHoneypot` keeps one socket lifecycle per mount. It reconnects after a close using a
 500 ms, 1 s, 2 s, 4 s, then 8 s delay, capped at 8 s. A successful open resets the
 attempt count. Cleanup cancels the reconnect timer, signal timer, in-flight health
 request, and socket. Audio playback is flushed when the bridge closes. Malformed

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useTarpit } from '@/lib/useTarpit';
+import { useHoneypot } from '@/lib/useHoneypot';
 import MetricsRail from './MetricsRail';
 import Transcript from './Transcript';
 import IntelPanel from './IntelPanel';
@@ -10,7 +10,7 @@ import CaseFile from './CaseFile';
 import { Dot, Panel } from './ui';
 import { resolveServerUrls } from '@/lib/connection';
 
-const SERVER = process.env.NEXT_PUBLIC_TARPIT_SERVER || 'localhost:8787';
+const SERVER = process.env.NEXT_PUBLIC_HONEYPOT_SERVER || 'localhost:8787';
 const PAGE_PROTOCOL = typeof window === 'undefined' ? 'http:' : window.location.protocol;
 const HTTP = resolveServerUrls(SERVER, PAGE_PROTOCOL).http;
 
@@ -18,19 +18,19 @@ type WorkspaceView = 'conversation' | 'evidence' | 'session';
 const workspaceViews: WorkspaceView[] = ['conversation', 'evidence', 'session'];
 
 export default function CommandCenter() {
-  const tarpit = useTarpit();
+  const honeypot = useHoneypot();
   const [selected, setSelected] = useState('harold');
   const [showCase, setShowCase] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('conversation');
 
-  const live = tarpit.conn === 'live';
-  const activeId = tarpit.activePersona?.id ?? selected;
-  const activePersona = tarpit.activePersona ?? tarpit.personas.find((persona) => persona.id === selected) ?? null;
-  const unavailable = tarpit.conn === 'offline' || tarpit.conn === 'connecting';
+  const live = honeypot.conn === 'live';
+  const activeId = honeypot.activePersona?.id ?? selected;
+  const activePersona = honeypot.activePersona ?? honeypot.personas.find((persona) => persona.id === selected) ?? null;
+  const unavailable = honeypot.conn === 'offline' || honeypot.conn === 'connecting';
 
   const pick = (id: string) => {
     setSelected(id);
-    tarpit.choosePersona(id);
+    honeypot.choosePersona(id);
   };
 
   const moveWorkspaceFocus = (event: React.KeyboardEvent<HTMLElement>) => {
@@ -49,9 +49,9 @@ export default function CommandCenter() {
 
   return (
     <main className="workspace-shell min-h-screen bg-canvas xl:h-screen xl:min-h-0">
-      {showCase && tarpit.metrics?.sessionId && (
+      {showCase && honeypot.metrics?.sessionId && (
         <CaseFile
-          sessionId={tarpit.metrics.sessionId}
+          sessionId={honeypot.metrics.sessionId}
           serverBase={HTTP}
           onClose={() => setShowCase(false)}
         />
@@ -65,13 +65,13 @@ export default function CommandCenter() {
             </div>
             <div className="min-w-0">
               <div className="flex items-baseline gap-2">
-                <h1 className="font-serif text-2xl tracking-[-0.04em] text-text">Tarpit</h1>
+                <h1 className="font-serif text-2xl tracking-[-0.04em] text-text">Honeypot</h1>
                 <span className="hidden text-xs text-muted md:inline">Scam call defense</span>
               </div>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
-                <Dot on={tarpit.conn !== 'offline'} color={live ? 'var(--color-danger)' : 'var(--color-positive)'} />
-                <span>{connectionLabel(tarpit.conn)}</span>
-                {tarpit.metrics?.sessionId && <span className="font-mono text-[10px] text-faint">{tarpit.metrics.sessionId}</span>}
+                <Dot on={honeypot.conn !== 'offline'} color={live ? 'var(--color-danger)' : 'var(--color-positive)'} />
+                <span>{connectionLabel(honeypot.conn)}</span>
+                {honeypot.metrics?.sessionId && <span className="font-mono text-[10px] text-faint">{honeypot.metrics.sessionId}</span>}
               </div>
             </div>
           </div>
@@ -80,14 +80,14 @@ export default function CommandCenter() {
             <button
               type="button"
               onClick={() => setShowCase(true)}
-              disabled={!tarpit.metrics?.sessionId}
+              disabled={!honeypot.metrics?.sessionId}
               className="rounded-md border border-border bg-surface px-3 py-2.5 text-sm font-semibold text-text transition-colors hover:border-border-strong hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-35"
             >
               Open report
             </button>
             <button
               type="button"
-              onClick={() => (live ? tarpit.stop() : tarpit.start(selected))}
+              onClick={() => (live ? honeypot.stop() : honeypot.start(selected))}
               disabled={unavailable}
               className={`flex-1 rounded-md px-4 py-2.5 text-sm font-semibold transition-transform active:scale-[0.98] sm:flex-none ${
                 live ? 'bg-danger text-white' : 'bg-accent text-white'
@@ -98,12 +98,12 @@ export default function CommandCenter() {
           </div>
         </header>
 
-        {((tarpit.health && !tarpit.health.ok) || tarpit.errors.length > 0) && (
+        {((honeypot.health && !honeypot.health.ok) || honeypot.errors.length > 0) && (
           <div role="alert" className="mt-3 shrink-0 rounded-lg border border-warning/20 bg-warning-soft px-4 py-3 text-sm text-warning">
-            {tarpit.health && !tarpit.health.ok && (
-              <span>Missing service keys: {tarpit.health.missing.join(', ')}. </span>
+            {honeypot.health && !honeypot.health.ok && (
+              <span>Missing service keys: {honeypot.health.missing.join(', ')}. </span>
             )}
-            {tarpit.errors.slice(-1)[0]}
+            {honeypot.errors.slice(-1)[0]}
           </div>
         )}
 
@@ -123,8 +123,8 @@ export default function CommandCenter() {
             <Panel title="Session setup" bodyClass="space-y-5 p-4">
               <div>
                 <p className="label mb-2">Persona</p>
-                {tarpit.personas.length > 0 ? (
-                  <PersonaPicker personas={tarpit.personas} activeId={activeId} onPick={pick} live={live} />
+                {honeypot.personas.length > 0 ? (
+                  <PersonaPicker personas={honeypot.personas} activeId={activeId} onPick={pick} live={live} />
                 ) : (
                   <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted">Personas load when the local server connects.</p>
                 )}
@@ -136,14 +136,14 @@ export default function CommandCenter() {
                   <Toggle
                     label="Phone line effect"
                     detail="Adds realistic call-band audio"
-                    pressed={tarpit.telephony}
-                    onClick={tarpit.toggleTelephony}
+                    pressed={honeypot.telephony}
+                    onClick={honeypot.toggleTelephony}
                   />
                   <Toggle
                     label="Half-duplex"
                     detail="Mutes the mic while persona speaks"
-                    pressed={tarpit.muteWhileSpeaking}
-                    onClick={tarpit.toggleMuteWhileSpeaking}
+                    pressed={honeypot.muteWhileSpeaking}
+                    onClick={honeypot.toggleMuteWhileSpeaking}
                   />
                 </div>
               </div>
@@ -151,22 +151,22 @@ export default function CommandCenter() {
               <div>
                 <p className="label mb-2">Services</p>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                  <Service on={!!tarpit.health?.services.deepgram} name="Deepgram" />
-                  <Service on={!!tarpit.health?.services.elevenlabs} name="ElevenLabs" />
-                  <Service on={!!tarpit.health?.services.openai} name="OpenAI" />
-                  <Service on={tarpit.health?.services.elastic === 'elastic'} name="Elastic" />
+                  <Service on={!!honeypot.health?.services.deepgram} name="Deepgram" />
+                  <Service on={!!honeypot.health?.services.elevenlabs} name="ElevenLabs" />
+                  <Service on={!!honeypot.health?.services.openai} name="OpenAI" />
+                  <Service on={honeypot.health?.services.elastic === 'elastic'} name="Elastic" />
                 </div>
               </div>
             </Panel>
 
             <MetricsRail
-              metrics={tarpit.metrics}
+              metrics={honeypot.metrics}
               persona={activePersona}
               live={live}
-              agentSpeaking={tarpit.agentSpeaking}
-              inputLevel={tarpit.inputLevel}
-              outputLevel={tarpit.outputLevel}
-              signals={tarpit.signals}
+              agentSpeaking={honeypot.agentSpeaking}
+              inputLevel={honeypot.inputLevel}
+              outputLevel={honeypot.outputLevel}
+              signals={honeypot.signals}
             />
           </aside>
 
@@ -177,12 +177,12 @@ export default function CommandCenter() {
             className={`${workspaceView === 'conversation' ? 'flex' : 'hidden'} min-h-0 flex-col xl:flex`}
           >
             <Transcript
-              lines={tarpit.transcript}
-              partial={tarpit.partial}
-              agentLive={tarpit.agentLive}
+              lines={honeypot.transcript}
+              partial={honeypot.partial}
+              agentLive={honeypot.agentLive}
               persona={activePersona}
               live={live}
-              onInject={tarpit.inject}
+              onInject={honeypot.inject}
             />
           </section>
 
@@ -192,14 +192,14 @@ export default function CommandCenter() {
             aria-labelledby="evidence-tab"
             className={`${workspaceView === 'evidence' ? 'flex' : 'hidden'} min-h-0 flex-col overflow-y-auto pb-4 xl:flex xl:pb-0`}
           >
-            <IntelPanel intel={tarpit.intel} enrichment={tarpit.enrichment} serverBase={HTTP} />
+            <IntelPanel intel={honeypot.intel} enrichment={honeypot.enrichment} serverBase={HTTP} />
           </aside>
         </div>
 
         <footer className="hidden shrink-0 items-center gap-3 pt-4 text-[11px] text-faint xl:flex">
           <span>Use headphones to prevent the persona from hearing its own voice.</span>
           <span className="ml-auto font-mono">
-            {tarpit.health?.models.stt || 'STT'} / {tarpit.health?.models.llm || 'LLM'} / {tarpit.health?.models.tts || 'TTS'}
+            {honeypot.health?.models.stt || 'STT'} / {honeypot.health?.models.llm || 'LLM'} / {honeypot.health?.models.tts || 'TTS'}
           </span>
         </footer>
       </div>

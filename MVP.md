@@ -1,4 +1,4 @@
-# Tarpit MVP Plan
+# Honeypot AI MVP Plan
 
 ## 1. Why this file exists
 
@@ -6,12 +6,12 @@ This file is the handoff plan for the next Codex session. It explains what is
 real, what is risky, what to build first, and how to prove each change works.
 
 The team has little time. The MVP must be a repeatable browser demo that shows
-the main value of Tarpit:
+the main value of Honeypot AI:
 
 1. A caller speaks or types a scam message.
-2. Tarpit turns speech into text.
+2. Honeypot AI turns speech into text.
 3. A fictional persona answers in real time.
-4. Tarpit finds useful scam intelligence.
+4. Honeypot AI finds useful scam intelligence.
 5. The transcript and intelligence appear in the command center.
 6. A case report can be exported.
 

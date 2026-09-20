@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-const ACCESS_TOKEN = process.env.NEXT_PUBLIC_TARPIT_TOKEN || '';
+const ACCESS_TOKEN = process.env.NEXT_PUBLIC_HONEYPOT_TOKEN || '';
 
 interface CaseFileData {
   case_id: string;
@@ -72,7 +72,7 @@ export default function CaseFile({
     try {
       const response = await fetch(`${serverBase}/api/report/${sessionId}/dispatch`, {
         method: 'POST',
-        headers: ACCESS_TOKEN ? { 'X-Tarpit-Token': ACCESS_TOKEN } : {},
+        headers: ACCESS_TOKEN ? { 'X-Honeypot-Token': ACCESS_TOKEN } : {},
       });
       const result = await response.json();
       if (mounted.current) {

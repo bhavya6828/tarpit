@@ -11,8 +11,8 @@ import {
   resolveServerUrls,
 } from './connection';
 
-const SERVER = process.env.NEXT_PUBLIC_TARPIT_SERVER || 'localhost:8787';
-const ACCESS_TOKEN = process.env.NEXT_PUBLIC_TARPIT_TOKEN || '';
+const SERVER = process.env.NEXT_PUBLIC_HONEYPOT_SERVER || 'localhost:8787';
+const ACCESS_TOKEN = process.env.NEXT_PUBLIC_HONEYPOT_TOKEN || '';
 const PAGE_PROTOCOL = typeof window === 'undefined' ? 'http:' : window.location.protocol;
 const URLS = resolveServerUrls(SERVER, PAGE_PROTOCOL);
 const WS_URL = `${URLS.ws}${ACCESS_TOKEN ? `?token=${encodeURIComponent(ACCESS_TOKEN)}` : ''}`;
@@ -28,7 +28,7 @@ export interface Health {
   models: { stt: string; tts: string; llm: string };
 }
 
-export function useTarpit() {
+export function useHoneypot() {
   const [conn, setConn] = useState<ConnState>('offline');
   const [personas, setPersonas] = useState<PersonaCard[]>([]);
   const [activePersona, setActivePersona] = useState<PersonaCard | null>(null);

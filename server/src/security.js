@@ -6,7 +6,7 @@ const loopback = (address) =>
   String(address || '').startsWith('::ffff:127.');
 
 const suppliedToken = (req) => {
-  const direct = req.headers?.['x-tarpit-token'];
+  const direct = req.headers?.['x-honeypot-token'];
   if (direct) return String(direct);
   const authorization = String(req.headers?.authorization || '');
   if (/^Bearer /i.test(authorization)) return authorization.slice(7);

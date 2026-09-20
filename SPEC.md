@@ -1,4 +1,4 @@
-# Tarpit, Technical Specification
+# Honeypot AI, Technical Specification
 
 > Status: implemented and running, except where marked **Not built**.
 > This document describes what the code actually does. Aspirational behaviour is
@@ -10,7 +10,7 @@
 
 Phone fraud is a volume business. A scam floor's unit economics depend on cycling
 through calls quickly; an operator tied up for eight minutes on one target is an
-operator not working three others. Tarpit attacks that economic assumption directly,
+operator not working three others. Honeypot AI attacks that economic assumption directly,
 and harvests the caller's payment infrastructure while doing it.
 
 **In scope**
@@ -72,7 +72,7 @@ codec negotiated at construction.
 | `server/src/twilio.js` | TwiML, signature validation, caller forensics, media bridge |
 | `server/src/report.js` | Case file, STIX 2.1, FTC pre-fill, dispatch |
 | `web/lib/audio.ts` | Mic capture, gapless PCM playback, telephony colouration |
-| `web/lib/useTarpit.ts` | WebSocket protocol client and UI state |
+| `web/lib/useHoneypot.ts` | WebSocket protocol client and UI state |
 
 ### 2.1 Browser interface
 
@@ -109,11 +109,11 @@ it would not survive scrutiny.
 
 **No IP address collection.** A PSTN call's audio arrives over the carrier network.
 There is no IP in the path. Systems claiming otherwise are describing a VoIP-only
-edge case or are wrong. Tarpit collects telephony-layer forensics instead (§9),
+edge case or are wrong. Honeypot AI collects telephony-layer forensics instead (§9),
 which has the advantage of being cryptographically verifiable.
 
 **No automated filing with law enforcement.** The FTC, FCC and IC3 accept complaints
-only through human web forms; no public filing API exists for anyone. Tarpit produces
+only through human web forms; no public filing API exists for anyone. Honeypot AI produces
 a referral *package* and does not render a "REPORTED ✓" badge it cannot back up.
 
 **No claim of legal admissibility.** Recordings are produced. Consent law varies by
@@ -122,7 +122,7 @@ jurisdiction. Every package carries an explicit caveat rather than an assurance.
 **No impersonation of a real person.** Personas are fictional. No real identity,
 voice likeness, or personal data is presented to the caller.
 
-**No outbound calling.** Tarpit answers; it never dials. Outbound baiting would make
+**No outbound calling.** Honeypot AI answers; it never dials. Outbound baiting would make
 this a harassment tool.
 
 ---
@@ -418,16 +418,16 @@ values.
 
 Three Elasticsearch indices, created on boot if absent.
 
-**`tarpit-intel`**, one document per artifact.
+**`honeypot-intel`**, one document per artifact.
 `@timestamp`, `session_id`, `type`, `label`, `value`, `severity`, `score`, `speaker`,
 `source_utterance`, `meta`
 
-**`tarpit-sessions`**, one document per engagement.
+**`honeypot-sessions`**, one document per engagement.
 `@timestamp`, `session_id`, `persona`, `transport`, `status`, `seconds_wasted`,
 `cost_destroyed_usd`, `turns`, `intel_count`, `scam_type`, `claimed_org`,
 `payment_rail`, `caller_number`, `caller_carrier`, `caller_attestation`
 
-**`tarpit-utterances`**, one document per line of dialogue.
+**`honeypot-utterances`**, one document per line of dialogue.
 `@timestamp`, `session_id`, `speaker`, `text`, `persona`
 
 Every write also lands in memory and appends to `data/*.jsonl`. Elastic is never on
@@ -507,9 +507,9 @@ enrichment, signals, and speaking state. A bridge disconnect also flushes playba
 and leaves an actionable offline message.
 
 The command WebSocket and report dispatch route use local-only access when
-`TARPIT_ACCESS_TOKEN` is blank. Remote clients are rejected. When a token is set,
-the server accepts it through `X-Tarpit-Token`, a bearer header, or the WebSocket
-`token` query parameter. The browser uses `NEXT_PUBLIC_TARPIT_TOKEN`. This is a
+`HONEYPOT_ACCESS_TOKEN` is blank. Remote clients are rejected. When a token is set,
+the server accepts it through `X-Honeypot AI-Token`, a bearer header, or the WebSocket
+`token` query parameter. The browser uses `NEXT_PUBLIC_HONEYPOT_TOKEN`. This is a
 small demo access boundary, not production user authentication.
 
 The browser automatically reconnects a dropped command socket with bounded
@@ -708,7 +708,7 @@ scammer's time, not more.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TARPIT_ACCESS_TOKEN` |, | remote command and dispatch access |
+| `HONEYPOT_ACCESS_TOKEN` |, | remote command and dispatch access |
 | `MAX_CONCURRENT_SESSIONS` | `4` | process session cap |
 | `MAX_SESSION_MINUTES` | `30` | automatic session stop |
 | `PROVIDER_TIMEOUT_MS` | `5000` | provider request and handshake timeout |
@@ -727,8 +727,8 @@ scammer's time, not more.
 | `SCAMMER_COST_PER_MINUTE` | `0.42` | metrics |
 | `AVG_SCAM_CALL_SECONDS` | `270` | metrics |
 | `VOICE_HAROLD` / `_DALE` / `_KEVIN` / `_BRENDA` | preset ids | voice override |
-| `NEXT_PUBLIC_TARPIT_SERVER` | `localhost:8787` | browser server host |
-| `NEXT_PUBLIC_TARPIT_TOKEN` |, | browser copy of demo access token |
+| `NEXT_PUBLIC_HONEYPOT_SERVER` | `localhost:8787` | browser server host |
+| `NEXT_PUBLIC_HONEYPOT_TOKEN` |, | browser copy of demo access token |
 
 ---
 
