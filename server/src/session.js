@@ -1,8 +1,15 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { DeepgramStream } from './deepgram.js';
-import { ElevenLabsStream } from './elevenlabs.js';
-import { openai, streamPersonaReply, pick, stripAudioTags, chunkForSpeech } from './brain.js';
+import { ElevenLabsStream, createVoice, speakCached } from './elevenlabs.js';
+import {
+  openai,
+  streamPersonaReply,
+  pick,
+  stripAudioTags,
+  chunkForSpeech,
+  backchannelDue,
+} from './brain.js';
 import { getPersona, DEFAULT_PERSONA } from './personas.js';
 import { extractIntel, detectSignals, enrichIntel } from './intel.js';
 import { store } from './elastic.js';
@@ -21,12 +28,15 @@ function isAbort(err) {
 const IDLE_NUDGE_MS = 9000;      // scammer silent this long → agent fills the gap
 const ENRICH_EVERY_TURNS = 3;    // LLM intel enrichment cadence
 const SPEAK_GRACE_MS = 700;      // ignore barge-in right after agent starts talking
+// Nobody says "hold on now" before every single sentence. Saying it every turn
+// was a bigger tell than the latency it was hiding.
+const FILLER_CHANCE = 0.35;
 
 const DEFAULT_DEPENDENCIES = {
   store,
   openaiAvailable: Boolean(openai),
   createDeepgram: (options) => new DeepgramStream(options).connect(),
-  createTTS: (options) => new ElevenLabsStream(options),
+  createTTS: (options) => createVoice(options),
   streamReply: streamPersonaReply,
   enrich: (model, transcript) => enrichIntel(openai, model, transcript),
   pick,
@@ -78,6 +88,10 @@ export class Session extends EventEmitter {
     this.speakStartedAt = 0;
     this.pendingUtterance = '';
     this.muteWhileSpeaking = false;
+    this.lastTactics = [];
+    this.callerSpeakingSince = 0;
+    this.lastBackchannelAt = 0;
+    this.backchannelCount = 0;
 
     this.metricsTimer = null;
     this.idleTimer = null;
@@ -236,10 +250,16 @@ export class Session extends EventEmitter {
     if (this.status !== 'live') return;
 
     if (!isFinal) {
+      if (!this.callerSpeakingSince) this.callerSpeakingSince = Date.now();
       this.emit('event', { type: 'transcript_partial', speaker: 'scammer', text });
       this.#maybeBargeIn(text);
+      this.#maybeBackchannel();
       return;
     }
+
+    // Their turn ended, so the listening window starts again on the next one.
+    this.callerSpeakingSince = 0;
+    this.backchannelCount = 0;
 
     this.pendingUtterance = `${this.pendingUtterance} ${text}`.trim();
     this.#armIdleTimer();
@@ -277,6 +297,47 @@ export class Session extends EventEmitter {
     this.emit('event', { type: 'interrupted', turnId: this.turnId, interruptions: this.interruptions });
   }
 
+  /**
+   * A listening noise while the caller is still talking.
+   *
+   * This deliberately takes no turn: it does not set agentSpeaking, advance
+   * turnId, or cancel anything. A backchannel that behaved like a reply would
+   * suppress barge-in and talk over the persona's own answer.
+   */
+  async #maybeBackchannel() {
+    const now = Date.now();
+    const due = backchannelDue(
+      {
+        speakingSince: this.callerSpeakingSince,
+        lastAt: this.lastBackchannelAt,
+        count: this.backchannelCount,
+        agentSpeaking: this.agentSpeaking,
+        turnInFlight: this.turnInFlight,
+      },
+      now
+    );
+    if (!due) return;
+
+    this.lastBackchannelAt = now;
+    this.backchannelCount++;
+
+    try {
+      const phrase = this.dependencies.pick(this.persona.backchannels || ['Mhm.']);
+      const pcm = await speakCached({
+        voiceId: this.persona.voiceId,
+        voiceSettings: this.persona.voiceSettings,
+        text: phrase,
+        transport: this.transport,
+      });
+      // Conditions can change while the audio is being fetched.
+      if (this.status !== 'live' || this.agentSpeaking) return;
+      this.emit('audio', { turnId: this.turnId, pcm });
+      this.emit('event', { type: 'backchannel', text: phrase });
+    } catch {
+      // A missing listening noise is never worth failing a call over.
+    }
+  }
+
   #flushTurn(cause) {
     const text = this.pendingUtterance.trim();
     if (!text || this.turnInFlight) return;
@@ -294,14 +355,29 @@ export class Session extends EventEmitter {
     const signals = detectSignals(scammerText);
     if (signals.length) this.emit('event', { type: 'signals', signals, cause });
 
+    // A tactic repeated every turn stops being a tactic and becomes a tic. The
+    // caller keeps saying "card" and "pay", so payment_pressure would fire on
+    // nearly every utterance and the persona would ask where to send the money
+    // over and over. Hold each one back for a turn after it fires.
+    const tactics = signals.filter((t) => !this.lastTactics.includes(t));
+    this.lastTactics = signals;
+
     let spoken = '';
     try {
-      const filler = this.dependencies.pick(this.persona.fillers);
+      const filler = Math.random() < FILLER_CHANCE ? this.dependencies.pick(this.persona.fillers) : '';
       const stream = this.dependencies.streamReply({
         persona: this.persona,
         history: this.history,
-        tactics: signals,
+        tactics,
         elapsedSeconds: this.elapsedSeconds(),
+        // Everything the call has established, so the persona tracks it rather
+        // than improvising a line that would fit any moment.
+        intel: this.intel,
+        enrichment: this.enrichment,
+        turnCount: this.turnCount,
+        // Told what was already said aloud, so the reply continues from it
+        // instead of stacking a second interjection in front.
+        spokenFiller: filler || null,
         signal: (this.abort = new AbortController()).signal,
       });
 
@@ -357,7 +433,9 @@ export class Session extends EventEmitter {
       onError: (e) => this.emit('event', { type: 'error', scope: 'elevenlabs', message: e.message }),
     });
     this.tts = tts;
-    tts.connect();
+    // The websocket client connects itself through the factory; the HTTP client
+    // has nothing to connect. Older injected doubles may still expose connect().
+    if (typeof tts.connect === 'function' && !tts.immediate) tts.connect();
 
     // The UI streams tokens as they arrive; the voice engine does not. Those are
     // separate concerns: live text keeps the operator informed, while the engine
@@ -369,11 +447,14 @@ export class Session extends EventEmitter {
       this.emit('event', { type: 'agent_delta', turnId, text: stripAudioTags(chunk) || chunk.replace(/\[[^\]]*\]/g, '') });
     };
 
-    // The filler is spoken immediately either way. It is what buys the time the
-    // rest of the reply takes to arrive.
+    // The filler is what buys the time the rest of the reply takes to arrive, so
+    // it must not wait on anything. The websocket client starts generating the
+    // moment it is pushed. The HTTP client cannot send until the reply is
+    // complete, so it speaks the filler as its own cached request instead.
     if (text) {
       show(`${text} `);
-      tts.push(`${text} `);
+      if (typeof tts.speakNow === 'function') await tts.speakNow(text);
+      else tts.push(`${text} `);
     }
 
     if (prefixOf) {
@@ -391,7 +472,7 @@ export class Session extends EventEmitter {
       }
     }
 
-    tts.end();
+    await tts.end();
 
     // Emotional direction belongs in the audio, not in the record.
     const finalText = stripAudioTags(full);

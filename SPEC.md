@@ -243,10 +243,70 @@ are injected as a system turn immediately before generation:
 This is the difference between an agent and a chatbot: strategy changes mid-call on
 live signals, rather than one frozen prompt running to completion.
 
+### 5.4.1 Backchannelling
+
+Strict alternation is not conversation. A listener on a phone call is audible the whole
+time: "mhm", "uh huh", "oh". Silence while the other person speaks is what makes a
+caller ask "hello? are you there?", and it is the strongest remaining cue that the other
+end is a recording.
+
+While the caller is speaking the persona emits short cached reactions, driven from
+Deepgram interim results:
+
+| Rule | Value | Reason |
+|---|---|---|
+| Caller must have been speaking | 2500 ms | reacting to three words is not listening |
+| Minimum spacing | 4000 ms | constant noise is worse than none |
+| Maximum per caller turn | 2 | any more reads as interruption |
+
+Backchannels are a fixed set of fixed phrases, so their audio is cached on disk exactly
+as fillers are and plays with no request. They deliberately do **not** take a turn: they
+never set `agentSpeaking`, never advance `turnId`, and never cancel in-flight
+generation, so they cannot interrupt the persona's own reply or suppress barge-in.
+
 ### 5.5 History
 
 Trimmed to `MAX_HISTORY_TURNS = 24`, always preserving the opening exchange so
 narrative continuity survives a long call.
+
+### 5.5.1 Person first
+
+The doctrine optimized for time-wasting produced a persona that stalled on every
+single turn: sit down, find the glasses, move the cat, ask for a repeat. That is not
+how a slow person behaves, it is how a delay machine behaves, and a caller hangs up on
+a delay machine.
+
+The stalling only works because the target seems real. So most turns are ordinary human
+responses, obstacles are occasional, and the agent is told when it has leaned on them
+too long. Consecutive stalls are counted against the persona's own obstacle vocabulary,
+and after two in a row the next turn is directed to simply respond: answer the question,
+react, ask something a normal person would ask.
+
+Being briefly lucid, direct, or even mildly impatient is in character. Nobody is
+confused every second of a phone call, and unbroken confusion reads as a performance.
+
+### 5.6 Call state
+
+Raw turns are a poor memory. A model given only a transcript improvises a plausible
+next line rather than tracking what has happened, which reads as reciting a script: it
+asks again for a number it already has, reuses an excuse it already spent, and answers
+around the question instead of answering it.
+
+Everything needed to fix that is already in the session, and is injected each turn as a
+compact set of facts:
+
+| Fact | Source |
+|---|---|
+| Who the caller claims to be | enrichment `claimed_org`, `claimed_name`, impersonation artifacts |
+| What they are demanding, and how much | enrichment `payment_rail`, `amount_demanded` |
+| Payment destinations already obtained | captured artifacts |
+| Excuses already spent | persona obstacle vocabulary matched against its own turns |
+| How long they have been held | elapsed seconds and turn count |
+
+Spent excuses are matched deterministically against a vocabulary each persona declares,
+so it costs nothing per turn and cannot invent an obstacle that was never used. Knowing
+a routing number is already captured is what lets the agent stop asking and start
+stalling on something else, which is the behavior that reads as understanding.
 
 ---
 
@@ -269,7 +329,17 @@ Four, each a `systemPrompt` composed of character text plus a shared **doctrine*
   waste a scammer's time by talking at them, a monologue lets them mute you and work
   another victim. Short turns force *them* to keep responding. Ten exchanges beat one
   speech. This single constraint cut average reply length ~45%.
-- **Hand the ball back.** End turns requiring a response. Dead air is a hang-up cue.
+- **Hand the ball back**, but not every turn and not the same way. Dead air is a
+  hang-up cue, yet a question every single time is a template, and a template is what
+  makes a voice sound generated however good the synthesis is.
+- **Vary the shape.** Real speech is uneven: four words, then thirty, then a fragment.
+  A constant reply length is a tell on its own.
+- **Never reuse an opener.** Repeating the same interjection turn after turn is the
+  most machine-like behavior available, so recent openings are fed back into the prompt
+  as phrases to avoid.
+- **A filler is not spoken every turn.** It fires on roughly a third of turns, and when
+  it does the model is told what was already said, so the reply continues from it
+  rather than stacking a second interjection in front.
 - **Harvest as confusion.** Asking a caller to repeat and spell payment details is
   in-character for a confused target and is the primary intel mechanism. Reading a
   long number back *wrong* is the highest-yield time-waster available.
@@ -487,12 +557,16 @@ Synthetic voice reads as fake mostly for reasons that are not the model.
 | Lever | Implementation | Why |
 |---|---|---|
 | Band-limiting | biquad 300–3400 Hz | real phone audio is narrowband; studio 24 kHz is the biggest tell |
-| Codec grit | `tanh` soft-clip, 2× oversampled | lossy codecs leave this on consonants |
+| Codec grit | `tanh` soft-clip, drive 1.15 | lossy codecs leave this on consonants |
 | Line levelling | compressor, ratio 6, −28 dB | phone lines are aggressively AGC'd |
-| Noise floor | brown-noise bed at 0.006 gain | digital silence between words is unnatural |
-| Room tone | per-persona ambience loop, gain 0.075 | Harold says "let me turn the television down" |
+| Noise floor | brown-noise bed at 0.0015 gain | digital silence is unnatural, audible hiss is worse |
+| Room tone | per-persona ambience loop, gain 0.028 | Harold says "let me turn the television down" |
 | Model | see below | expressiveness against latency |
 | Emotional direction | audio tags in generated text | inferred emotion is flat; stated emotion is not |
+
+Each lever is subtle alone and they stack. Hiss, room tone and soft-clip together read
+as a bad connection rather than a real one, so the noise elements sit far below where
+they were first set. The band-pass and the compressor do the work; noise is seasoning.
 
 Ambience is mixed **before** the telephony filter, because the caller hears the room
 down the same line. The chain is bypassable at runtime (`PHONE LINE` toggle) by
@@ -517,6 +591,61 @@ emotion is specified rather than hoped for, and personas emit them inline.
 
 Tags are stripped before a line is written to the transcript or indexed, so the intel
 record stays clean.
+
+### 12.2 Two synthesis paths
+
+`eleven_v3` is not available on the input-streaming websocket. The endpoint rejects
+it outright:
+
+```
+400 unsupported_model
+Model 'eleven_v3' is not supported on the text-to-speech websocket endpoint.
+```
+
+So the voice has two paths, selected from the configured model:
+
+| Path | Models | Mechanism |
+|---|---|---|
+| Websocket | `flash`, `turbo`, `multilingual` | Text pushed into an open socket, audio returns as it generates. |
+| HTTP | `eleven_v3` | Complete text posted once, audio streams back in the response body. |
+
+The HTTP path cannot begin until text is complete, so it synthesizes **per sentence**
+rather than per reply. Two reasons, both measured:
+
+| Text sent | `eleven_v3` first byte | `eleven_turbo_v2_5` first byte |
+|---|---|---|
+| Whole reply | 1505 ms | 283 ms |
+| First sentence only | 806 ms | 246 ms |
+
+v3's first byte scales with the length of the text it is given, so a shorter request
+is faster on its own, and it can start as soon as the first sentence exists instead of
+waiting for the whole reply. Together that roughly halves time to audio:
+
+| Path | Caller stops to persona audible |
+|---|---|
+| v3, whole reply | ~3.0 s |
+| v3, per sentence | **~1.5 s** |
+| turbo, websocket stream | ~1.2 s |
+
+The **first** span of a reply is released on a clause break rather than a sentence end,
+because it is the only thing between the caller and any audio at all. It must still
+clear a minimum length, since a stub like "Oh my," is the clipped delivery that made
+the voice sound like dictation, and a long run-on breaks on a word rather than holding
+every sample back. This matters most on the roughly two thirds of turns where no
+filler fires: those measured 2339ms and 3808ms to first audio against 929ms when one
+did, and now land between 1221ms and 1685ms.
+
+Requests are issued as each sentence completes and may be in flight together, but
+audio is emitted strictly in sentence order. The head sentence streams straight
+through; later ones buffer until their turn, which is cheap because a sentence is
+small. Out-of-order emission would rearrange the persona's words.
+
+**Filler prewarm.** On the HTTP path the filler is synthesized and cached to disk per
+persona and phrase on first use. Fillers are a fixed set of short fixed strings, so
+after the first call they play immediately with no request at all, which is what keeps
+the instant-response feel while the model is still writing the rest of the reply.
+Cached audio is keyed by voice, model and phrase, so changing any of those regenerates
+it.
 
 ---
 
@@ -557,6 +686,13 @@ laptop speakers. Interim transcripts plus a grace window are the reliable signal
 **Delimiters must survive digit normalization.** An early normalizer glued the
 trailing separator onto the following word (`021000021or`), breaking the `\b` anchor
 and silently dropping every routing number.
+
+**Streamed audio must stay on sample boundaries.** An HTTP response arrives in
+arbitrary byte lengths, so a chunk can end halfway through a 16-bit sample. Forwarding
+that shifts every following sample one byte, which does not sound like a glitch, it
+sounds like white noise, and the browser throws constructing an `Int16Array` from an
+odd byte count. The partial sample is carried into the next chunk. The websocket path
+never hit this because it delivered whole frames.
 
 **Reply length is a time-wasting lever, inverted.** Longer replies waste less of the
 scammer's time, not more.

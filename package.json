@@ -14,7 +14,7 @@
     "simulate": "node --env-file=.env scripts/simulate-call.mjs",
     "ambience": "node --env-file=.env scripts/generate-ambience.mjs",
     "voicelab": "node --env-file=.env scripts/voice-lab.mjs",
-    "test": "node --test test/*.test.mjs && npm --prefix server test"
+    "test": "node --experimental-strip-types --test test/*.test.mjs && npm --prefix server test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

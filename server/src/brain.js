@@ -11,7 +11,9 @@ VOICE DIRECTION: your line is spoken by an engine that acts on emotional cues
 written in square brackets. Without them you are read accurately and flatly,
 which sounds like a machine.
 
-Open your reply with ONE bracketed cue, and use at most one more inside it.
+Use ONE bracketed cue per reply, and do not put it in the same place every
+time. Opening every single turn with a cue is its own pattern. Often it belongs
+mid-sentence, where the feeling actually changes, and some lines need none.
 Choose what the moment actually calls for: [confused], [nervously], [frightened],
 [hopeful], [sighs], [chuckles], [slowly], [whispering], [cheerfully].
 
@@ -20,6 +22,149 @@ Write "[nervously] Oh my heavens, five thousand?" and never "[picks up wallet]".
 `.trim();
 
 const MAX_HISTORY_TURNS = 24;
+
+/**
+ * How the persona has recently started its turns.
+ *
+ * Opening every reply with the same interjection is the most machine-like thing
+ * a generated voice can do, and it happens because nothing in the prompt says
+ * otherwise. Feeding these back as phrases to avoid is what breaks the pattern.
+ */
+export function recentOpeners(history, limit = 4) {
+  const spoken = (history || [])
+    .filter((m) => m.role === 'assistant' && String(m.content || '').trim())
+    .slice(-limit);
+
+  return spoken.map((m) =>
+    stripAudioTags(m.content)
+      .split(/\s+/)
+      .slice(0, 4)
+      .join(' ')
+      .replace(/[.,!?;:]+$/, '')
+  );
+}
+
+// Listening noises are cheap and constant in real speech, but a bot that grunts
+// every second is worse than one that stays quiet.
+export const BACKCHANNEL_AFTER_MS = 2500;
+export const BACKCHANNEL_GAP_MS = 4000;
+export const BACKCHANNEL_MAX_PER_TURN = 2;
+
+/**
+ * Should the persona make a listening noise right now?
+ *
+ * Pure so the thresholds can be tested without a live call.
+ */
+export function backchannelDue(state, now) {
+  const { speakingSince, lastAt = 0, count = 0, agentSpeaking, turnInFlight } = state || {};
+  if (!speakingSince) return false;
+  if (agentSpeaking || turnInFlight) return false;
+  if (count >= BACKCHANNEL_MAX_PER_TURN) return false;
+  if (now - speakingSince < BACKCHANNEL_AFTER_MS) return false;
+  if (lastAt && now - lastAt < BACKCHANNEL_GAP_MS) return false;
+  return true;
+}
+
+/**
+ * How many of the persona's most recent turns in a row were stalls.
+ *
+ * Optimizing purely for delay produced a persona that reached for an obstacle
+ * every single turn. Nobody behaves that way, and a caller hangs up on someone
+ * who obviously will not get to the point, so a run of them is worth breaking.
+ */
+export function consecutiveStalls(persona, history) {
+  const patterns = Object.values(persona?.obstacles || {});
+  if (!patterns.length) return 0;
+
+  const spoken = (history || []).filter((m) => m.role === 'assistant' && String(m.content || '').trim());
+
+  let run = 0;
+  for (let i = spoken.length - 1; i >= 0; i--) {
+    const text = String(spoken[i].content);
+    if (patterns.some((p) => p.test(text))) run++;
+    else break;
+  }
+  return run;
+}
+
+const BE_A_PERSON = `
+You have leaned on an excuse two turns running. Stop. This turn, just respond
+like an ordinary person would: answer what he asked, react to it, or ask him
+something a real person would ask. No hunting for glasses, no cat, no wallet,
+nothing knocked off a table. You are allowed to be briefly clear-headed, and
+you are allowed to be a little impatient. Confusion every second of a call is
+a performance, and he can hear it.
+`.trim();
+
+/** Which of this persona's stock excuses have already been used aloud. */
+export function spentObstacles(persona, history) {
+  const said = (history || [])
+    .filter((m) => m.role === 'assistant')
+    .map((m) => String(m.content || ''))
+    .join(' ');
+
+  const spent = [];
+  for (const [name, pattern] of Object.entries(persona?.obstacles || {})) {
+    if (pattern.test(said)) spent.push(name);
+  }
+  return spent;
+}
+
+const ARTIFACT_ORDER = [
+  'bank_routing',
+  'bank_account',
+  'crypto_wallet',
+  'payment_card',
+  'payment_tag',
+  'gift_card',
+  'callback_number',
+];
+
+/**
+ * What the persona should already know, assembled from session state.
+ *
+ * A transcript alone makes a model improvise the next plausible line. Told
+ * plainly that it already has the routing number, it stops asking for it and
+ * stalls on something else, which is the behavior that reads as listening
+ * rather than reciting.
+ */
+export function describeCallState({ persona, history, intel = [], enrichment = null, elapsedSeconds = 0, turnCount = 0 }) {
+  const lines = [];
+
+  const who = [enrichment?.claimed_name, enrichment?.claimed_org].filter(Boolean).join(' of ');
+  if (who) lines.push(`The caller says he is ${who}.`);
+
+  const demand = [enrichment?.amount_demanded, enrichment?.payment_rail && `by ${enrichment.payment_rail}`]
+    .filter(Boolean)
+    .join(' ');
+  if (demand) lines.push(`He is demanding ${demand}.`);
+
+  const captured = ARTIFACT_ORDER.flatMap((type) =>
+    intel.filter((i) => i.type === type).map((i) => `${i.label} ${i.value}`)
+  );
+  if (captured.length) {
+    lines.push(
+      `You have ALREADY written down: ${captured.join('; ')}. ` +
+        'Do not ask for these again as though they are new. You may read one back wrong.'
+    );
+  }
+
+  const spent = spentObstacles(persona, history);
+  if (spent.length) {
+    lines.push(`Excuses you have already used, do not reuse them: ${spent.join(', ')}.`);
+  }
+
+  if (turnCount >= 4) {
+    lines.push(`You have held him ${Math.round(elapsedSeconds)}s across ${turnCount} exchanges.`);
+  }
+
+  if (!lines.length) return null;
+
+  return `WHAT YOU KNOW SO FAR IN THIS CALL:\n${lines.map((l) => `- ${l}`).join('\n')}\n
+Use this. Refer to specifics he has already given you. Answer the question he
+actually just asked, badly, rather than saying something that would fit any
+moment in the call.`;
+}
 
 /** Trim history but always keep the opening exchange for narrative continuity. */
 export function trimHistory(history) {
@@ -38,7 +183,17 @@ export function trimHistory(history) {
  * Yields text deltas already buffered to word boundaries, which is the right
  * granularity to hand to a streaming TTS socket.
  */
-export async function* streamPersonaReply({ persona, history, tactics = [], elapsedSeconds = 0, signal }) {
+export async function* streamPersonaReply({
+  persona,
+  history,
+  tactics = [],
+  elapsedSeconds = 0,
+  spokenFiller = null,
+  intel = [],
+  enrichment = null,
+  turnCount = 0,
+  signal,
+}) {
   if (!openai) {
     yield "Oh, uh... hold on now, I think something's wrong with my phone.";
     return;
@@ -60,6 +215,37 @@ export async function* streamPersonaReply({ persona, history, tactics = [], elap
       content: `SITUATION: you have kept this caller on the line for ${Math.floor(
         elapsedSeconds / 60
       )} minutes. They are heavily invested and unlikely to walk away now. Keep dangling the carrot — stay maximally cooperative, stay maximally slow.`,
+    });
+  }
+
+  // What it already knows, before what it should avoid saying. Facts first.
+  const state = describeCallState({ persona, history, intel, enrichment, elapsedSeconds, turnCount });
+  if (state) messages.push({ role: 'system', content: state });
+
+  if (consecutiveStalls(persona, history) >= 2) {
+    messages.push({ role: 'system', content: BE_A_PERSON });
+  }
+
+  const openers = recentOpeners(history);
+  if (openers.length) {
+    messages.push({
+      role: 'system',
+      content:
+        `You have already begun turns with: ${openers.map((o) => `"${o}"`).join(', ')}. ` +
+        'Do not open with any of those again, or with anything close to them. ' +
+        'Start this turn differently. React to the specific words the caller just used ' +
+        'rather than reaching for a stock phrase.',
+    });
+  }
+
+  // A filler has already been spoken aloud by the time this runs, so the reply
+  // has to continue from it. Otherwise the caller hears two openers stacked.
+  if (spokenFiller) {
+    messages.push({
+      role: 'system',
+      content:
+        `You have ALREADY said "${spokenFiller}" out loud. Continue straight on from it. ` +
+        'Do not greet, do not start with another interjection, do not repeat that phrase.',
     });
   }
 

@@ -136,7 +136,7 @@ export class AudioEngine {
 
     // Mild soft-clip: the grit a lossy voice codec leaves on consonants.
     this.shaper = ctx.createWaveShaper();
-    this.shaper.curve = softClipCurve(1.7);
+    this.shaper.curve = softClipCurve(1.15);
     this.shaper.oversample = '2x';
 
     // Phone lines are aggressively levelled; this is what flattens the dynamics
@@ -179,12 +179,16 @@ export class AudioEngine {
     // Rather than rewiring the graph, widen the filters to transparency.
     this.highpass.frequency.setTargetAtTime(on ? PHONE_HIGHPASS : 20, t, 0.02);
     this.lowpass.frequency.setTargetAtTime(on ? PHONE_LOWPASS : 20000, t, 0.02);
-    this.shaper.curve = on ? softClipCurve(1.7) : softClipCurve(0.001);
+    this.shaper.curve = on ? softClipCurve(1.15) : softClipCurve(0.001);
     this.comp.ratio.setTargetAtTime(on ? 6 : 1, t, 0.02);
-    this.hissGain.gain.setTargetAtTime(on ? 0.006 : 0, t, 0.05);
+    this.hissGain.gain.setTargetAtTime(on ? 0.0015 : 0, t, 0.05);
   }
 
-  /** Low-level line hiss so the gaps between words are never digitally dead. */
+  /**
+   * A trace of line noise so the gaps between words are not digitally dead.
+   * It should never be audible as hiss on its own; the band-pass and the
+   * compressor are what actually sell the phone line.
+   */
   private startHiss() {
     const ctx = this.playbackCtx;
     if (!ctx || !this.hissGain || this.hissSource) return;
@@ -238,8 +242,9 @@ export class AudioEngine {
     src.start();
     this.ambSource = src;
 
-    // Sit well under the voice — present, never distracting.
-    this.ambGain.gain.setTargetAtTime(0.075, ctx.currentTime, 0.6);
+    // Sit far under the voice. Anything you consciously notice is too loud,
+    // because it stacks with the hiss and the soft-clip already in the chain.
+    this.ambGain.gain.setTargetAtTime(0.028, ctx.currentTime, 0.6);
   }
 
   stopAmbience() {
@@ -285,7 +290,13 @@ export class AudioEngine {
       this.nextStart = Math.max(ctx.currentTime + SCHEDULE_LEAD, this.nextStart);
     }
 
-    const i16 = new Int16Array(pcm);
+    // Defence in depth. The server keeps chunks on sample boundaries, but an odd
+    // byte count here throws inside Int16Array and kills playback, so trim
+    // rather than trust. A byte-shifted buffer decodes as white noise, which is
+    // worse than dropping one sample.
+    const usable = pcm.byteLength - (pcm.byteLength % 2);
+    if (usable <= 0) return;
+    const i16 = new Int16Array(usable === pcm.byteLength ? pcm : pcm.slice(0, usable));
     if (!i16.length) return;
 
     const buffer = ctx.createBuffer(1, i16.length, PLAYBACK_RATE);
