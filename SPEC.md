@@ -246,7 +246,17 @@ Four, each a `systemPrompt` composed of character text plus a shared **doctrine*
   waste a scammer's time by talking at them, a monologue lets them mute you and work
   another victim. Short turns force *them* to keep responding. Ten exchanges beat one
   speech. This single constraint cut average reply length ~45%.
-- **Hand the ball back.** End turns requiring a response. Dead air is a hang-up cue.
+- **Hand the ball back**, but not every turn and not the same way. Dead air is a
+  hang-up cue, yet a question every single time is a template, and a template is what
+  makes a voice sound generated however good the synthesis is.
+- **Vary the shape.** Real speech is uneven: four words, then thirty, then a fragment.
+  A constant reply length is a tell on its own.
+- **Never reuse an opener.** Repeating the same interjection turn after turn is the
+  most machine-like behavior available, so recent openings are fed back into the prompt
+  as phrases to avoid.
+- **A filler is not spoken every turn.** It fires on roughly a third of turns, and when
+  it does the model is told what was already said, so the reply continues from it
+  rather than stacking a second interjection in front.
 - **Harvest as confusion.** Asking a caller to repeat and spell payment details is
   in-character for a confused target and is the primary intel mechanism. Reading a
   long number back *wrong* is the highest-yield time-waster available.
@@ -429,12 +439,16 @@ Synthetic voice reads as fake mostly for reasons that are not the model.
 | Lever | Implementation | Why |
 |---|---|---|
 | Band-limiting | biquad 300–3400 Hz | real phone audio is narrowband; studio 24 kHz is the biggest tell |
-| Codec grit | `tanh` soft-clip, 2× oversampled | lossy codecs leave this on consonants |
+| Codec grit | `tanh` soft-clip, drive 1.15 | lossy codecs leave this on consonants |
 | Line levelling | compressor, ratio 6, −28 dB | phone lines are aggressively AGC'd |
-| Noise floor | brown-noise bed at 0.006 gain | digital silence between words is unnatural |
-| Room tone | per-persona ambience loop, gain 0.075 | Harold says "let me turn the television down" |
+| Noise floor | brown-noise bed at 0.0015 gain | digital silence is unnatural, audible hiss is worse |
+| Room tone | per-persona ambience loop, gain 0.028 | Harold says "let me turn the television down" |
 | Model | see below | expressiveness against latency |
 | Emotional direction | audio tags in generated text | inferred emotion is flat; stated emotion is not |
+
+Each lever is subtle alone and they stack. Hiss, room tone and soft-clip together read
+as a bad connection rather than a real one, so the noise elements sit far below where
+they were first set. The band-pass and the compressor do the work; noise is seasoning.
 
 Ambience is mixed **before** the telephony filter, because the caller hears the room
 down the same line. The chain is bypassable at runtime (`PHONE LINE` toggle) by
