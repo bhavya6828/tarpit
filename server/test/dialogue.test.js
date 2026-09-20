@@ -11,7 +11,9 @@ test('recentOpeners reads only what the persona said', () => {
     turn('user', 'Pay now'),
     turn('assistant', 'Well now, hold on, I need my glasses.'),
   ]);
-  assert.deepEqual(openers, ['Oh my heavens', 'Well now, hold on']);
+  // Four words is enough to recognise a stock opening without pinning the
+  // whole sentence, which would let a trivial reword slip past.
+  assert.deepEqual(openers, ['Oh my heavens, five', 'Well now, hold on']);
 });
 
 test('recentOpeners strips audio tags so the cue is not mistaken for words', () => {

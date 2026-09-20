@@ -9,7 +9,9 @@ VOICE DIRECTION: your line is spoken by an engine that acts on emotional cues
 written in square brackets. Without them you are read accurately and flatly,
 which sounds like a machine.
 
-Open your reply with ONE bracketed cue, and use at most one more inside it.
+Use ONE bracketed cue per reply, and do not put it in the same place every
+time. Opening every single turn with a cue is its own pattern. Often it belongs
+mid-sentence, where the feeling actually changes, and some lines need none.
 Choose what the moment actually calls for: [confused], [nervously], [frightened],
 [hopeful], [sighs], [chuckles], [slowly], [whispering], [cheerfully].
 
@@ -18,6 +20,27 @@ Write "[nervously] Oh my heavens, five thousand?" and never "[picks up wallet]".
 `.trim();
 
 const MAX_HISTORY_TURNS = 24;
+
+/**
+ * How the persona has recently started its turns.
+ *
+ * Opening every reply with the same interjection is the most machine-like thing
+ * a generated voice can do, and it happens because nothing in the prompt says
+ * otherwise. Feeding these back as phrases to avoid is what breaks the pattern.
+ */
+export function recentOpeners(history, limit = 4) {
+  const spoken = (history || [])
+    .filter((m) => m.role === 'assistant' && String(m.content || '').trim())
+    .slice(-limit);
+
+  return spoken.map((m) =>
+    stripAudioTags(m.content)
+      .split(/\s+/)
+      .slice(0, 4)
+      .join(' ')
+      .replace(/[.,!?;:]+$/, '')
+  );
+}
 
 /** Trim history but always keep the opening exchange for narrative continuity. */
 export function trimHistory(history) {
@@ -36,7 +59,14 @@ export function trimHistory(history) {
  * Yields text deltas already buffered to word boundaries, which is the right
  * granularity to hand to a streaming TTS socket.
  */
-export async function* streamPersonaReply({ persona, history, tactics = [], elapsedSeconds = 0, signal }) {
+export async function* streamPersonaReply({
+  persona,
+  history,
+  tactics = [],
+  elapsedSeconds = 0,
+  spokenFiller = null,
+  signal,
+}) {
   if (!openai) {
     yield "Oh, uh... hold on now, I think something's wrong with my phone.";
     return;
@@ -58,6 +88,29 @@ export async function* streamPersonaReply({ persona, history, tactics = [], elap
       content: `SITUATION: you have kept this caller on the line for ${Math.floor(
         elapsedSeconds / 60
       )} minutes. They are heavily invested and unlikely to walk away now. Keep dangling the carrot — stay maximally cooperative, stay maximally slow.`,
+    });
+  }
+
+  const openers = recentOpeners(history);
+  if (openers.length) {
+    messages.push({
+      role: 'system',
+      content:
+        `You have already begun turns with: ${openers.map((o) => `"${o}"`).join(', ')}. ` +
+        'Do not open with any of those again, or with anything close to them. ' +
+        'Start this turn differently. React to the specific words the caller just used ' +
+        'rather than reaching for a stock phrase.',
+    });
+  }
+
+  // A filler has already been spoken aloud by the time this runs, so the reply
+  // has to continue from it. Otherwise the caller hears two openers stacked.
+  if (spokenFiller) {
+    messages.push({
+      role: 'system',
+      content:
+        `You have ALREADY said "${spokenFiller}" out loud. Continue straight on from it. ` +
+        'Do not greet, do not start with another interjection, do not repeat that phrase.',
     });
   }
 

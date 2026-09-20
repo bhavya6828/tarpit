@@ -21,6 +21,9 @@ function isAbort(err) {
 const IDLE_NUDGE_MS = 9000;      // scammer silent this long → agent fills the gap
 const ENRICH_EVERY_TURNS = 3;    // LLM intel enrichment cadence
 const SPEAK_GRACE_MS = 700;      // ignore barge-in right after agent starts talking
+// Nobody says "hold on now" before every single sentence. Saying it every turn
+// was a bigger tell than the latency it was hiding.
+const FILLER_CHANCE = 0.35;
 
 const DEFAULT_DEPENDENCIES = {
   store,
@@ -71,6 +74,7 @@ export class Session extends EventEmitter {
     this.speakStartedAt = 0;
     this.pendingUtterance = '';
     this.muteWhileSpeaking = false;
+    this.lastTactics = [];
 
     this.metricsTimer = null;
     this.idleTimer = null;
@@ -280,14 +284,24 @@ export class Session extends EventEmitter {
     const signals = detectSignals(scammerText);
     if (signals.length) this.emit('event', { type: 'signals', signals, cause });
 
+    // A tactic repeated every turn stops being a tactic and becomes a tic. The
+    // caller keeps saying "card" and "pay", so payment_pressure would fire on
+    // nearly every utterance and the persona would ask where to send the money
+    // over and over. Hold each one back for a turn after it fires.
+    const tactics = signals.filter((t) => !this.lastTactics.includes(t));
+    this.lastTactics = signals;
+
     let spoken = '';
     try {
-      const filler = this.dependencies.pick(this.persona.fillers);
+      const filler = Math.random() < FILLER_CHANCE ? this.dependencies.pick(this.persona.fillers) : '';
       const stream = this.dependencies.streamReply({
         persona: this.persona,
         history: this.history,
-        tactics: signals,
+        tactics,
         elapsedSeconds: this.elapsedSeconds(),
+        // Told what was already said aloud, so the reply continues from it
+        // instead of stacking a second interjection in front.
+        spokenFiller: filler || null,
         signal: (this.abort = new AbortController()).signal,
       });
 
