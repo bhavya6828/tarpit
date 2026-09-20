@@ -96,7 +96,7 @@ app.post('/twilio/voice', async (req, res) => {
 
   // Tunnels are public URLs. Without this the number is an open relay.
   const fullUrl = `${publicUrl}/twilio/voice`;
-  if (config.twilio.authToken && !validateSignature(req, fullUrl)) {
+  if (!validateSignature(req, fullUrl)) {
     console.warn('[twilio] rejected request with bad signature');
     return res.status(403).type('text/plain').send('invalid signature');
   }

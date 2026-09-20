@@ -200,7 +200,11 @@ export function attachMediaStream(ws, { pendingCalls, makeSession, onEvent }) {
         callSid = msg.start?.callSid || null;
 
         // The webhook ran moments ago and stashed the dossier under CallSid.
-        const caller = pendingCalls.get(callSid) || { transport: 'twilio', callSid };
+        const caller = pendingCalls.get(callSid);
+        if (!callSid || !caller) {
+          await teardown('unknown_call');
+          return;
+        }
         pendingCalls.delete(callSid);
 
         const personaId = msg.start?.customParameters?.persona || config.twilio.personaId;

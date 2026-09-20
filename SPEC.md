@@ -121,12 +121,14 @@ process. Fewer conversions, less latency, fewer failure modes.
 
 1. Inbound call → Twilio POSTs `/twilio/voice`.
 2. Request signature validated against `TWILIO_AUTH_TOKEN` (HMAC-SHA1 over URL +
-   sorted params). Rejected with 403 on mismatch. **This is load-bearing**: a tunnel
-   is a public URL, and without it the number is an open telephony relay.
+   sorted params). A missing token, missing signature, or mismatch is rejected with
+   403. **This is load-bearing**: a tunnel is a public URL, and without it the number
+   is an open telephony relay.
 3. Caller dossier assembled (§9) and stashed by `CallSid`, TTL 60 s.
 4. TwiML returns `<Connect><Stream>` pointing at `wss://…/twilio`.
 5. Twilio opens the media socket, sends `start` carrying `CallSid`.
-6. Dossier retrieved, `Session` constructed with `transport: 'twilio'`.
+6. Dossier retrieved, `Session` constructed with `transport: 'twilio'`. An unknown
+   or expired `CallSid` closes the media socket without creating a session.
 7. Bidirectional audio until `stop` or socket close.
 
 Live phone sessions are mirrored to every connected command-center client via a
