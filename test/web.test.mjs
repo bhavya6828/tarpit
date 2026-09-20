@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { AudioEngine } from '../web/lib/audio.ts';
 import { bridgeOfflineMessage, emptySessionView, normalizeInjectedText } from '../web/lib/sessionView.ts';
+
+test('Next uses a patched PostCSS release', () => {
+  const lock = JSON.parse(readFileSync(new URL('../web/package-lock.json', import.meta.url)));
+  const version = lock.packages['node_modules/next/node_modules/postcss']?.version
+    || lock.packages['node_modules/postcss']?.version;
+  const [major, minor, patch] = version.split('.').map(Number);
+
+  assert.ok(major > 8 || major === 8 && (minor > 5 || minor === 5 && patch >= 23));
+});
 
 test('type-to-talk accepts trimmed live input only', () => {
   assert.equal(normalizeInjectedText('  call me now  ', true), 'call me now');
