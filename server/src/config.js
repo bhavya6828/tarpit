@@ -16,6 +16,11 @@ export const config = {
     // 24kHz PCM: no decode step in the browser, no gaps between chunks.
     outputFormat: 'pcm_24000',
     sampleRate: 24000,
+    // How much text the voice engine receives at once. 'reply' gives it the
+    // whole utterance so it can plan intonation across the entire line, which
+    // is the difference between speech and dictation. 'clause' trades some of
+    // that back for lower latency.
+    granularity: process.env.TTS_GRANULARITY === 'clause' ? 'clause' : 'reply',
   },
 
   openai: {
