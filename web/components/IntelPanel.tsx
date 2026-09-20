@@ -108,7 +108,10 @@ export default function IntelPanel({
             {intel.map((item) => {
               const severity = SEVERITY[item.severity] || SEVERITY.low;
               return (
-                <li key={item.id} className="soft-land px-4 py-4">
+                <li
+                  key={item.id}
+                  className={`px-4 py-4 ${item.severity === 'critical' ? 'evidence-land' : 'soft-land'}`}
+                >
                   <div className="flex items-start gap-3">
                     <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${severity.dot}`} />
                     <div className="min-w-0 flex-1">

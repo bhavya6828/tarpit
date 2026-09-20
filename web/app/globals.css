@@ -1,26 +1,31 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #f7f6f2;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f0eee8;
-  --color-text: #20211f;
-  --color-muted: #6f706b;
-  --color-faint: #9b9b94;
-  --color-border: #dedbd3;
-  --color-border-strong: #c8c4ba;
-  --color-accent: #20211f;
-  --color-positive: #35624b;
-  --color-positive-soft: #edf3ec;
-  --color-warning: #8b641c;
-  --color-warning-soft: #fbf3db;
-  --color-danger: #9a3c39;
-  --color-danger-soft: #fdebec;
-  --color-info: #356982;
-  --color-info-soft: #e1f3fe;
-  --font-sans: "Helvetica Neue", "Avenir Next", Arial, sans-serif;
-  --font-serif: Georgia, "Times New Roman", serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /* A defence console, viewed in a dim room, from across a table. */
+  --color-canvas: #08090b;
+  --color-surface: #101216;
+  --color-surface-subtle: #171a20;
+  --color-text: #e8eaed;
+  --color-muted: #9aa1ad;
+  --color-faint: #646c7a;
+  --color-border: #22262e;
+  --color-border-strong: #333944;
+
+  --color-accent: #00e08a;
+  --color-accent-soft: #0b2a1f;
+
+  --color-positive: #35d28a;
+  --color-positive-soft: #0d2a1e;
+  --color-warning: #ffb547;
+  --color-warning-soft: #2c2013;
+  --color-danger: #ff4d61;
+  --color-danger-soft: #2e1218;
+  --color-info: #5aa9ff;
+  --color-info-soft: #101f31;
+
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", "JetBrains Mono", Consolas, monospace;
 }
 
 * {
@@ -38,6 +43,9 @@ body {
 
 body {
   margin: 0;
+  /* A cold wash from above so the header reads as the top of a console. */
+  background-image: radial-gradient(120% 70% at 50% -10%, rgba(0, 224, 138, 0.07), transparent 65%);
+  background-attachment: fixed;
 }
 
 button,
@@ -54,31 +62,51 @@ input {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 2px solid var(--color-info);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--color-info-soft);
+  background: rgba(0, 224, 138, 0.25);
 }
 
 @layer utilities {
   .panel {
-    background: var(--color-surface);
+    background: linear-gradient(180deg, var(--color-surface-subtle), var(--color-surface));
     border: 1px solid var(--color-border);
     border-radius: 12px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .label {
-    color: var(--color-muted);
-    font-size: 11px;
+    color: var(--color-faint);
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
   }
 
   .tnum {
     font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* The number judges read from across the room. */
+  .hero-metric {
+    font-family: var(--font-mono);
+    font-size: clamp(44px, 7vw, 76px);
+    line-height: 0.92;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .glow-accent {
+    text-shadow: 0 0 28px rgba(0, 224, 138, 0.45);
+  }
+
+  .glow-danger {
+    text-shadow: 0 0 28px rgba(255, 77, 97, 0.45);
   }
 }
 
@@ -100,12 +128,53 @@ input:focus-visible {
   }
 }
 
+/* A captured artifact should be impossible to miss, then settle. */
+@keyframes evidence-land {
+  0% {
+    opacity: 0;
+    transform: translateX(-8px);
+    background-color: rgba(255, 77, 97, 0.22);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateX(0);
+    background-color: rgba(255, 77, 97, 0.12);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes live-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 97, 0.55);
+  }
+
+  70% {
+    box-shadow: 0 0 0 9px rgba(255, 77, 97, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 97, 0);
+  }
+}
+
 .soft-land {
   animation: soft-land 320ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .quiet-pulse {
   animation: quiet-pulse 1.4s ease-in-out infinite;
+}
+
+.evidence-land {
+  animation: evidence-land 1500ms ease-out;
+}
+
+.live-ring {
+  animation: live-ring 1.8s ease-out infinite;
 }
 
 ::-webkit-scrollbar {
@@ -122,6 +191,10 @@ input:focus-visible {
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-faint);
 }
 
 @media (min-width: 1024px) {

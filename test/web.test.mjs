@@ -78,16 +78,24 @@ test('command center keeps every work area reachable on narrow screens', () => {
   assert.doesNotMatch(source, /hidden min-h-0 lg:block/);
 });
 
-test('command center uses the minimal warm visual system', () => {
+test('command center uses the dark console visual system', () => {
   const css = readWebFile('app/globals.css');
-  const layout = readWebFile('app/layout.tsx');
 
-  assert.match(css, /--color-canvas:\s*#f7f6f2/i);
-  assert.match(css, /--color-surface:\s*#ffffff/i);
-  assert.match(css, /--color-text:\s*#20211f/i);
-  assert.match(css, /--color-accent:\s*#20211f/i);
-  assert.doesNotMatch(css, /repeating-linear-gradient|scanline|glow-phos|--color-void/i);
-  assert.doesNotMatch(layout, /\bInter\b|--font-inter/);
+  // A defence console read from across a room, not a document.
+  assert.match(css, /--color-canvas:\s*#08090b/i);
+  assert.match(css, /--color-surface:\s*#101216/i);
+  assert.match(css, /--color-text:\s*#e8eaed/i);
+  assert.match(css, /--color-accent:\s*#00e08a/i);
+
+  // The hero metric has to be legible at distance, so it is clamped large.
+  assert.match(css, /\.hero-metric/);
+  assert.match(css, /clamp\(44px/);
+
+  // Captured evidence announces itself, then settles.
+  assert.match(css, /\.evidence-land/);
+
+  // Depth comes from gradients and glow, never from scanlines or CRT pastiche.
+  assert.doesNotMatch(css, /repeating-linear-gradient|scanline/i);
 });
 
 test('referral package is exposed as an accessible dialog', () => {

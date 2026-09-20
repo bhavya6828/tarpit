@@ -32,16 +32,20 @@ export default function MetricsRail({
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
+      {/* The one number a judge should be able to read from across the room. */}
       <Panel title="Engagement" bodyClass="p-4">
-        <p className="label">Scammer time occupied</p>
-        <p className={`tnum mt-2 font-serif text-4xl tracking-[-0.04em] ${live ? 'text-text' : 'text-faint'}`}>
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${live ? 'bg-danger live-ring' : 'bg-faint'}`} />
+          <p className="label">{live ? 'Scammer time occupied' : 'Standing by'}</p>
+        </div>
+        <p className={`hero-metric mt-3 ${live ? 'text-accent glow-accent' : 'text-faint'}`}>
           {formatClock(seconds)}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Stat label="Cost disrupted" value={`$${(metrics?.costDestroyed ?? 0).toFixed(2)}`} />
-          <Stat label="Calls displaced" value={(metrics?.victimsShielded ?? 0).toFixed(2)} />
+          <Stat label="Cost disrupted" value={`$${(metrics?.costDestroyed ?? 0).toFixed(2)}`} tone="text-warning" />
+          <Stat label="Calls displaced" value={(metrics?.victimsShielded ?? 0).toFixed(2)} tone="text-info" />
           <Stat label="Turns" value={String(metrics?.turns ?? 0)} />
-          <Stat label="Evidence" value={String(metrics?.intelCount ?? 0)} />
+          <Stat label="Evidence" value={String(metrics?.intelCount ?? 0)} tone="text-accent" />
         </div>
       </Panel>
 
@@ -57,7 +61,9 @@ export default function MetricsRail({
       {persona && (
         <Panel title="Active persona" bodyClass="p-4">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold text-text">{persona.name}</span>
+            <span className="font-semibold" style={{ color: persona.color || 'var(--color-text)' }}>
+              {persona.name}
+            </span>
             <span className="text-xs text-muted">Age {persona.age}</span>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-muted">{persona.tagline}</p>
@@ -82,11 +88,11 @@ export default function MetricsRail({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, tone = 'text-text' }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-lg border border-border bg-canvas px-3 py-2">
-      <div className="text-[10px] font-semibold tracking-wide text-muted uppercase">{label}</div>
-      <div className="tnum mt-1 text-base font-semibold text-text">{value}</div>
+    <div className="rounded-lg border border-border bg-canvas/60 px-3 py-2">
+      <div className="text-[10px] font-semibold tracking-wide text-faint uppercase">{label}</div>
+      <div className={`tnum mt-1 text-lg font-semibold ${tone}`}>{value}</div>
     </div>
   );
 }
