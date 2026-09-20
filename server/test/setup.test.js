@@ -8,6 +8,10 @@ test('environment template lists supported settings without secrets', async () =
   const contents = await readFile(rootFile('.env.example'), 'utf8');
   const expected = [
     'PORT',
+    'TARPIT_ACCESS_TOKEN',
+    'MAX_CONCURRENT_SESSIONS',
+    'MAX_SESSION_MINUTES',
+    'PROVIDER_TIMEOUT_MS',
     'DEEPGRAM_API_KEY',
     'DEEPGRAM_MODEL',
     'ELEVENLABS_API_KEY',
@@ -34,6 +38,7 @@ test('environment template lists supported settings without secrets', async () =
     'VOICE_KEVIN',
     'VOICE_BRENDA',
     'NEXT_PUBLIC_TARPIT_SERVER',
+    'NEXT_PUBLIC_TARPIT_TOKEN',
   ];
   const entries = new Map(
     contents
