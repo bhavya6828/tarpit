@@ -25,11 +25,19 @@ const PORT = flag('port', process.env.PORT || '8787');
 const HOLD = Number(flag('hold', '35')); // seconds to stay on the line
 const SCAMMER_VOICE = flag('voice', 'pNInz6obpgDQGcFmaJgB');
 
-const DEFAULT_SCRIPT =
-  'Sir, this is Agent Miller with the I R S. You owe five thousand dollars in back taxes. ' +
-  'Wire it to routing number zero two one zero zero zero zero two one immediately, ' +
-  'or call me back at six one seven, five five five, zero one four two.';
+// Separate utterances, not one monologue. A caller who never stops talking gives
+// the persona no turn boundary, which makes response latency unmeasurable and is
+// nothing like a real call.
+const DEFAULT_SCRIPT = [
+  'Sir, this is Agent Miller with the I R S.',
+  'You owe five thousand dollars in back taxes.',
+  'Wire it to routing number zero two one zero zero zero zero two one.',
+  'Did you write that down? Read it back to me.',
+  'Or call me back at six one seven, five five five, zero one four two.',
+].join(' | ');
+// Pipe separates utterances; each is spoken, then the caller waits.
 const SCRIPT = flag('script', DEFAULT_SCRIPT);
+const GAP_MS = Number(flag('gap', '5000'));
 
 const CACHE = path.resolve('data', `sim-${Buffer.from(SCRIPT).toString('base64url').slice(0, 24)}.raw`);
 
@@ -46,20 +54,24 @@ function downsample24to16(pcm24) {
   return Buffer.from(out.buffer);
 }
 
-async function getAudio() {
-  if (fs.existsSync(CACHE)) {
-    console.log('  using cached scammer audio');
-    return fs.readFileSync(CACHE);
-  }
-  console.log('  synthesizing scammer via ElevenLabs…');
-  const pcm = downsample24to16(await synthesizeOnce(SCAMMER_VOICE, SCRIPT, { stability: 0.5, similarity_boost: 0.75 }));
-  fs.mkdirSync(path.dirname(CACHE), { recursive: true });
-  fs.writeFileSync(CACHE, pcm);
+async function getUtterance(text, index) {
+  const file = CACHE.replace(/\.raw$/, `-${index}.raw`);
+  if (fs.existsSync(file)) return fs.readFileSync(file);
+  const pcm = downsample24to16(await synthesizeOnce(SCAMMER_VOICE, text, { stability: 0.5, similarity_boost: 0.75 }));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, pcm);
   return pcm;
 }
 
-const pcm = await getAudio();
-console.log(`  ${(pcm.length / 2 / 16000).toFixed(1)}s of scammer audio ready\n`);
+const lines = SCRIPT.split('|').map((t) => t.trim()).filter(Boolean);
+const utterances = [];
+for (const [i, line] of lines.entries()) {
+  process.stdout.write(`  utterance ${i + 1}/${lines.length}… `);
+  const pcm = await getUtterance(line, i);
+  utterances.push({ text: line, pcm });
+  console.log(`${(pcm.length / 2 / 16000).toFixed(1)}s`);
+}
+console.log(`  ${utterances.length} utterances, ${GAP_MS}ms of silence between them\n`);
 
 const ws = new WebSocket(`ws://localhost:${PORT}/ws`);
 ws.binaryType = 'nodebuffer';
@@ -73,6 +85,7 @@ let callerStoppedAt = 0;
 let awaitingReply = false;
 // A listening noise is not a reply, so only audio after audio_start counts.
 let replyStarted = false;
+let replyStartedAt = 0;
 const responseTimes = [];
 
 ws.on('error', (e) => {
@@ -83,28 +96,43 @@ ws.on('error', (e) => {
 ws.on('open', () => {
   ws.send(JSON.stringify({ type: 'start', personaId: PERSONA }));
 
-  // Let the persona answer before the scammer launches into the script.
-  setTimeout(() => {
-    const FRAME = 1024; // 512 samples @16kHz = 32ms
-    let off = 0;
-    setInterval(() => {
-      if (off >= pcm.length) {
-        if (off === pcm.length) {
-          console.log(`${ts()} ◀ scammer stopped talking (line still open)`);
-          off++;
-        }
-        // A real mic keeps streaming silence — Deepgram needs to hear the pause
-        // to finalize the last utterance.
+  // Speak one utterance, then wait, exactly as a caller would. The silence is
+  // real audio, because Deepgram finalizes on a heard pause, not on absence.
+  const FRAME = 1024; // 512 samples @16kHz = 32ms
+  let index = 0;
+  let off = 0;
+  let speaking = false;
+  let waitUntil = Date.now() + 1500;
+
+  setInterval(() => {
+    const now = Date.now();
+
+    if (!speaking) {
+      if (now < waitUntil || index >= utterances.length) {
         ws.send(Buffer.alloc(FRAME));
         return;
       }
-      ws.send(pcm.subarray(off, off + FRAME));
-      off += FRAME;
-    }, 32);
-  }, 1500);
+      speaking = true;
+      off = 0;
+    }
 
-  setTimeout(() => ws.send(JSON.stringify({ type: 'stop' })), HOLD * 1000);
-  setTimeout(finish, HOLD * 1000 + 2000);
+    const current = utterances[index].pcm;
+    if (off >= current.length) {
+      speaking = false;
+      index++;
+      waitUntil = now + GAP_MS;
+      if (index >= utterances.length) console.log(`${ts()} ◀ caller has finished`);
+      ws.send(Buffer.alloc(FRAME));
+      return;
+    }
+
+    ws.send(current.subarray(off, off + FRAME));
+    off += FRAME;
+  }, 32);
+
+  const runtime = utterances.reduce((a, u) => a + u.pcm.length / 2 / 16000, 0) * 1000 + utterances.length * GAP_MS + 8000;
+  setTimeout(() => ws.send(JSON.stringify({ type: 'stop' })), runtime);
+  setTimeout(finish, runtime + 2000);
 });
 
 ws.on('message', (d, isBinary) => {
@@ -117,10 +145,10 @@ ws.on('message', (d, isBinary) => {
       // still being generated, so audio can land microseconds after a later
       // final while belonging to an earlier turn. Those are carryover, not a
       // response, and counting them would flatter the number.
-      // Carryover from a turn that was already in flight. Abandon this
-      // measurement rather than leaving it open, or the next listening noise
-      // gets counted as the response seconds later.
-      if (ms < 150) {
+      // Only count a reply that began after the caller stopped. A caller who
+      // talks continuously produces finals while a previous reply is still
+      // being spoken, and that audio belongs to the earlier turn.
+      if (replyStartedAt < callerStoppedAt) {
         awaitingReply = false;
         replyStarted = false;
         return;
@@ -155,6 +183,7 @@ ws.on('message', (d, isBinary) => {
       break;
     case 'audio_start':
       replyStarted = true;
+      replyStartedAt = Date.now();
       break;
     case 'backchannel':
       console.log(`${ts()}   \u266a "${e.text}"  (listening while they talk)`);
