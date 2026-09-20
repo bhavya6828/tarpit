@@ -220,6 +220,27 @@ are injected as a system turn immediately before generation:
 This is the difference between an agent and a chatbot: strategy changes mid-call on
 live signals, rather than one frozen prompt running to completion.
 
+### 5.4.1 Backchannelling
+
+Strict alternation is not conversation. A listener on a phone call is audible the whole
+time: "mhm", "uh huh", "oh". Silence while the other person speaks is what makes a
+caller ask "hello? are you there?", and it is the strongest remaining cue that the other
+end is a recording.
+
+While the caller is speaking the persona emits short cached reactions, driven from
+Deepgram interim results:
+
+| Rule | Value | Reason |
+|---|---|---|
+| Caller must have been speaking | 2500 ms | reacting to three words is not listening |
+| Minimum spacing | 4000 ms | constant noise is worse than none |
+| Maximum per caller turn | 2 | any more reads as interruption |
+
+Backchannels are a fixed set of fixed phrases, so their audio is cached on disk exactly
+as fillers are and plays with no request. They deliberately do **not** take a turn: they
+never set `agentSpeaking`, never advance `turnId`, and never cancel in-flight
+generation, so they cannot interrupt the persona's own reply or suppress barge-in.
+
 ### 5.5 History
 
 Trimmed to `MAX_HISTORY_TURNS = 24`, always preserving the opening exchange so
