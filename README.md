@@ -1,8 +1,8 @@
-# Harold
+# Honeypot AI
 
 ## Product
 
-Harold is an autonomous AI bodyguard for scam calls.
+Honeypot AI is an autonomous AI bodyguard for scam calls.
 It answers the phone so real people do not have to.
 
 ## Problem
