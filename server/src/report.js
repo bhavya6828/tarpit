@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
+import { config } from './config.js';
 import { store } from './elastic.js';
 import { getPersona } from './personas.js';
+import { redactIntelItem, redactPaymentText } from './redact.js';
 
 /**
  * Referral package generation.
@@ -48,19 +50,20 @@ const uuid5ish = (seed) =>
 
 // ─── Case file ──────────────────────────────────────────────────────────────
 
-export async function buildCaseFile(sessionId) {
-  const { session, intel, utterances } = await store.sessionBundle(sessionId);
+export async function buildCaseFile(sessionId, source = store) {
+  const { session, intel, utterances } = await source.sessionBundle(sessionId);
   if (!session && !intel.length) return null;
 
   const persona = getPersona(session?.persona);
-  const bySeverity = (s) => intel.filter((i) => i.severity === s);
+  const safeIntel = intel.map((item) => redactIntelItem(item, intel));
+  const bySeverity = (s) => safeIntel.filter((i) => i.severity === s);
 
   // Cross-call correlation: has any of this appeared in another engagement?
   const repeats = [];
   for (const item of intel.filter((i) => ['crypto_wallet', 'bank_routing', 'callback_number', 'origin_number', 'payment_tag'].includes(i.type))) {
-    const hits = await store.correlate(item.value);
+    const hits = await source.correlate(item.value);
     const others = [...new Set(hits.map((h) => h.session_id))].filter((s) => s !== sessionId);
-    if (others.length) repeats.push({ ...item, also_seen_in: others, occurrences: hits.length });
+    if (others.length) repeats.push({ ...redactIntelItem(item, intel), also_seen_in: others, occurrences: hits.length });
   }
 
   return {
@@ -96,11 +99,11 @@ export async function buildCaseFile(sessionId) {
     },
 
     artifacts: {
-      total: intel.length,
+      total: safeIntel.length,
       critical: bySeverity('critical').length,
       high: bySeverity('high').length,
-      validated: intel.filter((i) => String(i.meta?.validated || '').includes('PASS')).length,
-      items: intel.map((i) => ({
+      validated: safeIntel.filter((i) => String(i.meta?.validated || '').includes('PASS')).length,
+      items: safeIntel.map((i) => ({
         type: i.type,
         label: i.label,
         value: i.value,
@@ -120,7 +123,7 @@ export async function buildCaseFile(sessionId) {
     transcript: utterances.map((u) => ({
       at: u['@timestamp'],
       speaker: u.speaker === 'scammer' ? 'SUSPECT' : 'DECOY',
-      text: u.text,
+      text: redactPaymentText(u.text, intel),
     })),
 
     disclosure: {
@@ -296,6 +299,7 @@ export async function dispatch(caseFile, url) {
   try {
     const res = await fetch(url, {
       method: 'POST',
+      signal: AbortSignal.timeout(config.security.providerTimeoutMs),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ case_file: caseFile, stix: toStixBundle(caseFile) }),
     });

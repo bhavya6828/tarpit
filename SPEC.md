@@ -74,6 +74,27 @@ codec negotiated at construction.
 | `web/lib/audio.ts` | Mic capture, gapless PCM playback, telephony colouration |
 | `web/lib/useTarpit.ts` | WebSocket protocol client and UI state |
 
+### 2.1 Browser interface
+
+The browser command center is a calm incident workspace built around one primary
+workflow: choose a persona, start an engagement, follow the conversation, review
+captured evidence, and open the referral package.
+
+- The default desktop layout keeps Session, Conversation, and Evidence visible in
+  three clear work areas without decorative command-center effects.
+- Narrow viewports provide labeled tabs for all three work areas. Metrics and intel
+  remain reachable on mobile rather than disappearing.
+- The start or end engagement action is the only visually dominant control.
+- Persona choice, phone-line audio, half-duplex audio, and referral access are grouped
+  by task and use plain labels.
+- Normal, empty, connecting, live, ended, missing-key, and offline states remain
+  understandable without relying on color alone.
+- The visual system uses a warm neutral canvas, white surfaces, charcoal text, subtle
+  borders, one dark primary action, and muted semantic status colors. It has no CRT
+  scanlines, neon glow, gradients, or large decorative effects.
+- Keyboard focus is visible. The referral package is an accessible modal dialog that
+  closes with Escape and has a labeled close control.
+
 ---
 
 ## 3. Non-goals
@@ -121,12 +142,14 @@ process. Fewer conversions, less latency, fewer failure modes.
 
 1. Inbound call → Twilio POSTs `/twilio/voice`.
 2. Request signature validated against `TWILIO_AUTH_TOKEN` (HMAC-SHA1 over URL +
-   sorted params). Rejected with 403 on mismatch. **This is load-bearing**: a tunnel
-   is a public URL, and without it the number is an open telephony relay.
+   sorted params). A missing token, missing signature, or mismatch is rejected with
+   403. **This is load-bearing**: a tunnel is a public URL, and without it the number
+   is an open telephony relay.
 3. Caller dossier assembled (§9) and stashed by `CallSid`, TTL 60 s.
 4. TwiML returns `<Connect><Stream>` pointing at `wss://…/twilio`.
 5. Twilio opens the media socket, sends `start` carrying `CallSid`.
-6. Dossier retrieved, `Session` constructed with `transport: 'twilio'`.
+6. Dossier retrieved, `Session` constructed with `transport: 'twilio'`. An unknown
+   or expired `CallSid` closes the media socket without creating a session.
 7. Bidirectional audio until `stop` or socket close.
 
 Live phone sessions are mirrored to every connected command-center client via a
@@ -405,6 +428,12 @@ Three Elasticsearch indices, created on boot if absent.
 Every write also lands in memory and appends to `data/*.jsonl`. Elastic is never on
 the critical path of a call.
 
+The local store reloads all valid JSONL records on process start, so reports remain
+available when Elasticsearch is absent or fails. Payment cards, routing numbers,
+and bank account numbers are masked before any memory, JSONL, or Elasticsearch
+write, including artifact identifiers. Local records have no automatic expiry and
+remain until the operator deletes the files under `data/`.
+
 ---
 
 ## 9. Caller forensics
@@ -467,6 +496,30 @@ Server → client, JSON events plus binary audio framed as
 
 `inject` feeds text as though the caller had spoken it, same pipeline, no microphone.
 It is the UI's type-to-talk box and the demo's mic-failure fallback.
+Typed input is trimmed and blank input is ignored. A new session flushes queued
+audio and clears the transcript, partial text, live persona text, intel, metrics,
+enrichment, signals, and speaking state. A bridge disconnect also flushes playback
+and leaves an actionable offline message.
+
+The command WebSocket and report dispatch route use local-only access when
+`TARPIT_ACCESS_TOKEN` is blank. Remote clients are rejected. When a token is set,
+the server accepts it through `X-Tarpit-Token`, a bearer header, or the WebSocket
+`token` query parameter. The browser uses `NEXT_PUBLIC_TARPIT_TOKEN`. This is a
+small demo access boundary, not production user authentication.
+
+The browser automatically reconnects a dropped command socket with bounded
+exponential backoff from 500 ms to 8 seconds. A successful connection resets the
+backoff. Reconnection stops when the page unmounts. Repeated bridge errors are
+deduplicated, malformed JSON events and undersized audio frames are ignored without
+crashing the UI, and secure pages use HTTPS and WSS endpoints automatically.
+
+Health, campaign summary, and case-file requests are abortable. A component that
+unmounts or starts a replacement poll aborts its stale request so late responses do
+not update inactive UI.
+
+The process allows four concurrent sessions by default. Each session ends after
+30 minutes by default. External provider HTTP calls and WebSocket handshakes time
+out after five seconds by default.
 
 ---
 
@@ -475,6 +528,11 @@ It is the UI's type-to-talk box and the demo's mic-failure fallback.
 **Case file**, engagement metadata, classification, caller forensics, every artifact
 with its validation result, full transcript, cross-engagement correlation, and
 disclosure block.
+
+Payment cards, routing numbers, and bank account numbers are masked to their last
+four digits in every exported artifact, transcript excerpt, and transcript line.
+JSON, Markdown, STIX, FTC pre-fill, and webhook dispatch all derive from this same
+redacted case file.
 
 **STIX 2.1 bundle**, `identity` + one `indicator` per artifact + a `report` linking
 them. Patterns use standard SCOs where they exist (`email-addr`, `domain-name`,
@@ -604,6 +662,8 @@ it.
 | Ambience fetch fails | silently skipped; never breaks a call |
 | Twilio bad signature | 403, call rejected |
 | Browser never reports playback | server-side timeout releases `agentSpeaking` |
+| Browser command socket drops | UI reconnects with bounded backoff and preserves the current view |
+| Malformed command frame | frame is ignored and an actionable bridge error is retained once |
 
 ---
 
@@ -643,6 +703,10 @@ scammer's time, not more.
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `TARPIT_ACCESS_TOKEN` |, | remote command and dispatch access |
+| `MAX_CONCURRENT_SESSIONS` | `4` | process session cap |
+| `MAX_SESSION_MINUTES` | `30` | automatic session stop |
+| `PROVIDER_TIMEOUT_MS` | `5000` | provider request and handshake timeout |
 | `DEEPGRAM_API_KEY` |, | required |
 | `DEEPGRAM_MODEL` | `nova-3` | |
 | `ELEVENLABS_API_KEY` |, | required |
@@ -658,6 +722,8 @@ scammer's time, not more.
 | `SCAMMER_COST_PER_MINUTE` | `0.42` | metrics |
 | `AVG_SCAM_CALL_SECONDS` | `270` | metrics |
 | `VOICE_HAROLD` / `_DALE` / `_KEVIN` / `_BRENDA` | preset ids | voice override |
+| `NEXT_PUBLIC_TARPIT_SERVER` | `localhost:8787` | browser server host |
+| `NEXT_PUBLIC_TARPIT_TOKEN` |, | browser copy of demo access token |
 
 ---
 
@@ -678,6 +744,8 @@ Audio fixtures are cached in `data/` keyed by script hash, so repeat runs cost n
 
 ### Verified
 
+- Automated type-to-talk loop with fake provider edges through persona audio,
+  extraction, JSONL, process-restart recovery, case file, STIX, Markdown, and FTC.
 - Full loop end to end with live keys across all four services.
 - Spoken routing number → transcription → ABA checksum PASS → indexed.
 - Barge-in cancelling generation and flushing queued audio.

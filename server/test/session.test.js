@@ -41,7 +41,7 @@ const waitFor = async (predicate) => {
   assert.fail('condition not reached');
 };
 
-function makeHarness({ streamReply, enrich, openaiAvailable = false } = {}) {
+function makeHarness({ streamReply, enrich, openaiAvailable = false, maxDurationMs } = {}) {
   const calls = {
     sessions: [],
     utterances: [],
@@ -105,7 +105,7 @@ function makeHarness({ streamReply, enrich, openaiAvailable = false } = {}) {
       return enrich ? enrich(...args) : null;
     },
   };
-  const session = new Session({ dependencies });
+  const session = new Session({ dependencies, maxDurationMs });
   return { session, calls, get deepgram() { return deepgram; } };
 }
 
@@ -234,6 +234,22 @@ test('missing provider key fallback still completes a typed turn', async () => {
     assert.equal(harness.session.turnCount, 1);
     assert.ok(harness.calls.utterances.some((item) => item.speaker === 'persona'));
     assert.equal(events.some((event) => event.type === 'error'), false);
+  } finally {
+    await harness.session.stop();
+  }
+});
+
+test('maximum duration ends and persists a live session', async () => {
+  const harness = makeHarness({ maxDurationMs: 10 });
+  const events = [];
+  harness.session.on('event', (event) => events.push(event));
+
+  try {
+    await harness.session.start();
+    await waitFor(() => harness.session.status === 'ended');
+
+    assert.equal(events.find((event) => event.type === 'session_end')?.reason, 'max_duration');
+    assert.equal(harness.calls.sessions.at(-1).status, 'ended');
   } finally {
     await harness.session.stop();
   }

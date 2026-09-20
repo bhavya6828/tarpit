@@ -14,24 +14,33 @@ export default function PersonaPicker({
   live: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      {personas.map((p) => {
-        const on = p.id === activeId;
+    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Choose a persona">
+      {personas.map((persona) => {
+        const selected = persona.id === activeId;
         return (
           <button
-            key={p.id}
-            onClick={() => onPick(p.id)}
-            title={`${p.name}, ${p.age} — ${p.tagline}`}
-            className="group rounded-sm border px-2.5 py-1 text-[11px] transition-all"
-            style={{
-              borderColor: on ? p.color : 'var(--color-edge)',
-              color: on ? p.color : 'var(--color-dim)',
-              background: on ? `${p.color}14` : 'transparent',
-              boxShadow: on ? `0 0 16px -4px ${p.color}` : 'none',
-            }}
+            key={persona.id}
+            type="button"
+            onClick={() => onPick(persona.id)}
+            aria-pressed={selected}
+            title={`${persona.name}, age ${persona.age}: ${persona.tagline}`}
+            className={`min-h-20 rounded-lg border p-3 text-left transition-colors ${
+              selected
+                ? 'border-text bg-text text-white'
+                : 'border-border bg-surface text-text hover:border-border-strong hover:bg-surface-subtle'
+            }`}
           >
-            {p.name.split(' ')[0]}
-            {live && on && <span className="ml-1.5 text-[9px] opacity-70">▸ on air</span>}
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{persona.name.split(' ')[0]}</span>
+              {live && selected && (
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase">
+                  Live
+                </span>
+              )}
+            </span>
+            <span className={`mt-1 block text-[11px] leading-snug ${selected ? 'text-white/70' : 'text-muted'}`}>
+              {persona.tagline}
+            </span>
           </button>
         );
       })}

@@ -99,6 +99,7 @@ export async function lookupNumber(e164) {
 
   try {
     const res = await fetch(url, {
+      signal: AbortSignal.timeout(config.security.providerTimeoutMs),
       headers: { Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}` },
     });
     if (!res.ok) return {};
@@ -200,11 +201,19 @@ export function attachMediaStream(ws, { pendingCalls, makeSession, onEvent }) {
         callSid = msg.start?.callSid || null;
 
         // The webhook ran moments ago and stashed the dossier under CallSid.
-        const caller = pendingCalls.get(callSid) || { transport: 'twilio', callSid };
+        const caller = pendingCalls.get(callSid);
+        if (!callSid || !caller) {
+          await teardown('unknown_call');
+          return;
+        }
         pendingCalls.delete(callSid);
 
         const personaId = msg.start?.customParameters?.persona || config.twilio.personaId;
         session = makeSession({ personaId, transport: 'twilio', caller });
+        if (!session) {
+          await teardown('capacity_reached');
+          return;
+        }
         session.on('event', onSessionEvent);
         session.on('audio', onAudio);
         await session.start();

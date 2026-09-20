@@ -50,9 +50,16 @@ const DEFAULT_DEPENDENCIES = {
  *                    └──► intel extraction ──► Elastic          PCM ────┘──► browser
  */
 export class Session extends EventEmitter {
-  constructor({ personaId = DEFAULT_PERSONA, transport = 'browser', caller = null, dependencies = {} } = {}) {
+  constructor({
+    personaId = DEFAULT_PERSONA,
+    transport = 'browser',
+    caller = null,
+    dependencies = {},
+    maxDurationMs = config.security.maxSessionMs,
+  } = {}) {
     super();
     this.dependencies = { ...DEFAULT_DEPENDENCIES, ...dependencies };
+    this.maxDurationMs = maxDurationMs;
     this.id = randomUUID().slice(0, 8);
     this.persona = getPersona(personaId);
     this.transport = transport;
@@ -88,6 +95,8 @@ export class Session extends EventEmitter {
 
     this.metricsTimer = null;
     this.idleTimer = null;
+    this.maxDurationTimer = null;
+    this.playbackTimers = new Set();
   }
 
   // ─── lifecycle ────────────────────────────────────────────────────────────
@@ -115,6 +124,8 @@ export class Session extends EventEmitter {
     });
 
     this.metricsTimer = setInterval(() => this.emit('event', { type: 'metrics', ...this.metrics() }), 500);
+    this.maxDurationTimer = setTimeout(() => this.stop('max_duration'), this.maxDurationMs);
+    this.maxDurationTimer.unref?.();
     this.#armIdleTimer();
 
     await this.dependencies.store.upsertSession(this.#sessionDoc());
@@ -131,6 +142,9 @@ export class Session extends EventEmitter {
 
     clearInterval(this.metricsTimer);
     clearTimeout(this.idleTimer);
+    clearTimeout(this.maxDurationTimer);
+    for (const timer of this.playbackTimers) clearTimeout(timer);
+    this.playbackTimers.clear();
     this.#cancelAgentTurn();
     this.dg?.close();
     this.dg = null;
@@ -483,7 +497,12 @@ export class Session extends EventEmitter {
     }
 
     // Safety net in case the browser never reports playback completion.
-    setTimeout(() => this.notePlaybackDone(turnId), 2000 + finalText.length * 70);
+    const playbackTimer = setTimeout(() => {
+      this.playbackTimers.delete(playbackTimer);
+      this.notePlaybackDone(turnId);
+    }, 2000 + finalText.length * 70);
+    this.playbackTimers.add(playbackTimer);
+    playbackTimer.unref?.();
     return full;
   }
 

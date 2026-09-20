@@ -57,7 +57,11 @@ export class AudioEngine {
   private playingTurn = -1;
   private queuedForTurn = 0;
 
-  constructor(private h: AudioEngineHandlers) {}
+  private h: AudioEngineHandlers;
+
+  constructor(h: AudioEngineHandlers) {
+    this.h = h;
+  }
 
   get micActive() {
     return !!this.stream;

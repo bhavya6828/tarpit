@@ -50,4 +50,12 @@ Anything left blank falls back to a working default.
 `TTS_GRANULARITY` takes `reply` (default, best prosody) or `clause` (lower latency).
 `TWILIO_PERSONA` takes `harold`, `dale`, `kevin`, or `brenda`.
 
+With `TARPIT_ACCESS_TOKEN` blank, command and dispatch access is local-only.
+For a remote command center, set `TARPIT_ACCESS_TOKEN` and
+`NEXT_PUBLIC_TARPIT_TOKEN` to the same demo token before building the web app.
+This token is visible to the browser and is not production user authentication.
+
+`MAX_CONCURRENT_SESSIONS` defaults to `4`, `MAX_SESSION_MINUTES` defaults to `30`,
+and `PROVIDER_TIMEOUT_MS` defaults to `5000`.
+
 Built by Max Gong, Kate Kaneshiro, Bhavya Wadhwa, and Hong Cheng Wang.

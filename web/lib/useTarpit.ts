@@ -2,11 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioEngine } from './audio';
-import type { ConnState, Enrichment, IntelItem, Metrics, PersonaCard, TranscriptLine } from './types';
+import type { ConnState, Enrichment, IntelItem, Metrics, PersonaCard, Speaker, TranscriptLine } from './types';
+import { bridgeOfflineMessage, emptySessionView } from './sessionView';
+import {
+  appendUniqueError,
+  parseSocketMessage,
+  reconnectDelay,
+  resolveServerUrls,
+} from './connection';
 
 const SERVER = process.env.NEXT_PUBLIC_TARPIT_SERVER || 'localhost:8787';
-const HTTP = `http://${SERVER}`;
-const WS_URL = `ws://${SERVER}/ws`;
+const ACCESS_TOKEN = process.env.NEXT_PUBLIC_TARPIT_TOKEN || '';
+const PAGE_PROTOCOL = typeof window === 'undefined' ? 'http:' : window.location.protocol;
+const URLS = resolveServerUrls(SERVER, PAGE_PROTOCOL);
+const WS_URL = `${URLS.ws}${ACCESS_TOKEN ? `?token=${encodeURIComponent(ACCESS_TOKEN)}` : ''}`;
+const invalidBridgeMessage = 'audio bridge sent an invalid frame';
 
 let lineSeq = 0;
 const nextId = () => `l${++lineSeq}`;
@@ -41,33 +51,64 @@ export function useTarpit() {
   const wsRef = useRef<WebSocket | null>(null);
   const engineRef = useRef<AudioEngine | null>(null);
 
-  const send = useCallback((msg: Record<string, unknown>) => {
-    const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  const send = useCallback((message: Record<string, unknown>) => {
+    const socket = wsRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return false;
+    try {
+      socket.send(JSON.stringify(message));
+      return true;
+    } catch {
+      setErrors((current) => appendUniqueError(current, bridgeOfflineMessage));
+      return false;
+    }
   }, []);
 
-  // ─── health probe ────────────────────────────────────────────────────────
   useEffect(() => {
-    let cancelled = false;
-    const poll = () =>
-      fetch(`${HTTP}/api/health`)
-        .then((r) => r.json())
-        .then((h) => !cancelled && setHealth(h))
-        .catch(() => !cancelled && setHealth(null));
-    poll();
-    const t = setInterval(poll, 8000);
+    let active = true;
+    let controller: AbortController | null = null;
+
+    const poll = async () => {
+      controller?.abort();
+      const current = new AbortController();
+      controller = current;
+      let timedOut = false;
+      const timeout = window.setTimeout(() => {
+        timedOut = true;
+        current.abort();
+      }, 5000);
+
+      try {
+        const response = await fetch(`${URLS.http}/api/health`, { signal: current.signal });
+        if (!response.ok) throw new Error(`health ${response.status}`);
+        const payload = await response.json();
+        if (active && controller === current) setHealth(payload);
+      } catch (error) {
+        const aborted = error instanceof DOMException && error.name === 'AbortError';
+        if (active && controller === current && (timedOut || !aborted)) setHealth(null);
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    };
+
+    void poll();
+    const interval = window.setInterval(() => void poll(), 8000);
     return () => {
-      cancelled = true;
-      clearInterval(t);
+      active = false;
+      window.clearInterval(interval);
+      controller?.abort();
     };
   }, []);
 
-  // ─── audio engine ────────────────────────────────────────────────────────
   useEffect(() => {
     engineRef.current = new AudioEngine({
-      onPcm: (buf) => {
-        const ws = wsRef.current;
-        if (ws?.readyState === WebSocket.OPEN) ws.send(buf);
+      onPcm: (buffer) => {
+        const socket = wsRef.current;
+        if (socket?.readyState !== WebSocket.OPEN) return;
+        try {
+          socket.send(buffer);
+        } catch {
+          setErrors((current) => appendUniqueError(current, bridgeOfflineMessage));
+        }
       },
       onInputLevel: setInputLevel,
       onOutputLevel: setOutputLevel,
@@ -79,111 +120,162 @@ export function useTarpit() {
     };
   }, [send]);
 
-  // ─── socket ──────────────────────────────────────────────────────────────
-  const connect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return;
-    setConn('connecting');
+  useEffect(() => {
+    let disposed = false;
+    let attempts = 0;
+    let reconnectTimer: number | null = null;
+    let signalTimer: number | null = null;
 
-    const ws = new WebSocket(WS_URL);
-    ws.binaryType = 'arraybuffer';
-    wsRef.current = ws;
+    const connect = () => {
+      if (disposed) return;
+      const current = wsRef.current;
+      if (current && current.readyState <= WebSocket.OPEN) return;
 
-    ws.onopen = () => setConn('ready');
-    ws.onclose = () => {
-      setConn('offline');
-      setAgentSpeaking(false);
+      setConn('connecting');
+      const socket = new WebSocket(WS_URL);
+      socket.binaryType = 'arraybuffer';
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        if (disposed || wsRef.current !== socket) return;
+        attempts = 0;
+        setConn('ready');
+        setErrors((currentErrors) => currentErrors.filter((message) => message !== bridgeOfflineMessage));
+      };
+
+      socket.onclose = () => {
+        if (wsRef.current === socket) wsRef.current = null;
+        engineRef.current?.flush();
+        engineRef.current?.stopAmbience();
+        if (disposed) return;
+        setConn('offline');
+        setAgentSpeaking(false);
+        const delay = reconnectDelay(attempts);
+        attempts += 1;
+        reconnectTimer = window.setTimeout(connect, delay);
+      };
+
+      socket.onerror = () => {
+        if (!disposed) setErrors((currentErrors) => appendUniqueError(currentErrors, bridgeOfflineMessage));
+      };
+
+      socket.onmessage = (message) => {
+        if (disposed || wsRef.current !== socket) return;
+        const parsed = parseSocketMessage(message.data);
+        if (parsed.kind === 'invalid') {
+          setErrors((currentErrors) => appendUniqueError(currentErrors, invalidBridgeMessage));
+          return;
+        }
+        if (parsed.kind === 'audio') {
+          engineRef.current?.enqueue(parsed.turnId, parsed.payload);
+          return;
+        }
+
+        const event = parsed.event;
+        switch (event.type) {
+          case 'hello':
+            if (Array.isArray(event.personas)) setPersonas(event.personas as PersonaCard[]);
+            break;
+          case 'session_start': {
+            const fresh = emptySessionView();
+            const persona = event.persona as PersonaCard;
+            engineRef.current?.flush();
+            setConn('live');
+            setActivePersona(persona);
+            engineRef.current?.setAmbience(persona?.id ?? null);
+            setTranscript(fresh.transcript);
+            setPartial(fresh.partial);
+            setAgentLive(fresh.agentLive);
+            setIntel(fresh.intel);
+            setMetrics(fresh.metrics);
+            setEnrichment(fresh.enrichment);
+            setSignals(fresh.signals);
+            setAgentSpeaking(fresh.agentSpeaking);
+            break;
+          }
+          case 'session_end':
+            setConn('ended');
+            setAgentSpeaking(false);
+            engineRef.current?.stopAmbience();
+            if (event.enrichment) setEnrichment(event.enrichment as Enrichment);
+            break;
+          case 'persona_changed': {
+            const persona = event.persona as PersonaCard;
+            setActivePersona(persona);
+            engineRef.current?.setAmbience(persona?.id ?? null);
+            break;
+          }
+          case 'transcript_partial':
+            if (typeof event.text === 'string') setPartial(event.text);
+            break;
+          case 'transcript':
+            if (typeof event.text !== 'string') break;
+            if (event.speaker === 'scammer') setPartial('');
+            else setAgentLive('');
+            setTranscript((currentTranscript) => [
+              ...currentTranscript,
+              {
+                id: nextId(),
+                speaker: event.speaker as Speaker,
+                text: event.text as string,
+                final: true,
+                injected: Boolean(event.injected),
+                at: Date.now(),
+              },
+            ]);
+            break;
+          case 'agent_delta':
+            if (typeof event.text === 'string') setAgentLive((text) => text + event.text);
+            break;
+          case 'audio_start':
+            setAgentSpeaking(true);
+            setAgentLive('');
+            break;
+          case 'audio_flush':
+          case 'interrupted':
+            engineRef.current?.flush();
+            setAgentSpeaking(false);
+            break;
+          case 'state':
+            if (typeof event.agentSpeaking === 'boolean') setAgentSpeaking(event.agentSpeaking);
+            if (typeof event.muteWhileSpeaking === 'boolean') setMuteWhileSpeaking(event.muteWhileSpeaking);
+            break;
+          case 'metrics':
+            setMetrics(event as unknown as Metrics);
+            break;
+          case 'intel':
+            if (event.item) setIntel((currentIntel) => [event.item as IntelItem, ...currentIntel].slice(0, 200));
+            setLastIntelAt(Date.now());
+            break;
+          case 'enrichment':
+            if (event.enrichment) setEnrichment(event.enrichment as Enrichment);
+            break;
+          case 'signals':
+            if (Array.isArray(event.signals)) {
+              setSignals(event.signals.filter((signal): signal is string => typeof signal === 'string'));
+              if (signalTimer) window.clearTimeout(signalTimer);
+              signalTimer = window.setTimeout(() => setSignals([]), 6000);
+            }
+            break;
+          case 'error':
+            setErrors((currentErrors) => appendUniqueError(currentErrors, `${String(event.scope)}: ${String(event.message)}`));
+            break;
+          default:
+            break;
+        }
+      };
     };
-    ws.onerror = () => setErrors((e) => [...e.slice(-4), 'audio bridge unreachable — is the server running?']);
 
-    ws.onmessage = (ev) => {
-      // Binary frame = [uint32 turnId][PCM16 @24kHz]
-      if (ev.data instanceof ArrayBuffer) {
-        const view = new DataView(ev.data);
-        const turnId = view.getUint32(0, true);
-        engineRef.current?.enqueue(turnId, ev.data.slice(4));
-        return;
-      }
-
-      const evt = JSON.parse(ev.data as string);
-      switch (evt.type) {
-        case 'hello':
-          setPersonas(evt.personas);
-          break;
-        case 'session_start':
-          setConn('live');
-          setActivePersona(evt.persona);
-          engineRef.current?.setAmbience(evt.persona?.id ?? null);
-          setTranscript([]);
-          setIntel([]);
-          setEnrichment(null);
-          setSignals([]);
-          break;
-        case 'session_end':
-          setConn('ended');
-          setAgentSpeaking(false);
-          engineRef.current?.stopAmbience();
-          if (evt.enrichment) setEnrichment(evt.enrichment);
-          break;
-        case 'persona_changed':
-          setActivePersona(evt.persona);
-          engineRef.current?.setAmbience(evt.persona?.id ?? null);
-          break;
-        case 'transcript_partial':
-          setPartial(evt.text);
-          break;
-        case 'transcript':
-          if (evt.speaker === 'scammer') setPartial('');
-          else setAgentLive('');
-          setTranscript((t) => [
-            ...t,
-            { id: nextId(), speaker: evt.speaker, text: evt.text, final: true, injected: evt.injected, at: Date.now() },
-          ]);
-          break;
-        case 'agent_delta':
-          setAgentLive((s) => s + evt.text);
-          break;
-        case 'audio_start':
-          setAgentSpeaking(true);
-          setAgentLive('');
-          break;
-        case 'audio_flush':
-        case 'interrupted':
-          engineRef.current?.flush();
-          setAgentSpeaking(false);
-          break;
-        case 'state':
-          if (typeof evt.agentSpeaking === 'boolean') setAgentSpeaking(evt.agentSpeaking);
-          if (typeof evt.muteWhileSpeaking === 'boolean') setMuteWhileSpeaking(evt.muteWhileSpeaking);
-          break;
-        case 'metrics':
-          setMetrics(evt);
-          break;
-        case 'intel':
-          setIntel((prev) => [evt.item, ...prev].slice(0, 200));
-          setLastIntelAt(Date.now());
-          break;
-        case 'enrichment':
-          setEnrichment(evt.enrichment);
-          break;
-        case 'signals':
-          setSignals(evt.signals);
-          setTimeout(() => setSignals([]), 6000);
-          break;
-        case 'error':
-          setErrors((e) => [...e.slice(-4), `${evt.scope}: ${evt.message}`]);
-          break;
-        default:
-          break;
-      }
+    connect();
+    return () => {
+      disposed = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      if (signalTimer) window.clearTimeout(signalTimer);
+      const socket = wsRef.current;
+      wsRef.current = null;
+      socket?.close();
     };
   }, []);
-
-  useEffect(() => {
-    connect();
-    return () => wsRef.current?.close();
-  }, [connect]);
-
-  // ─── actions ─────────────────────────────────────────────────────────────
 
   const start = useCallback(
     async (personaId: string) => {
@@ -191,13 +283,12 @@ export function useTarpit() {
       try {
         await engineRef.current?.ensurePlayback();
         await engineRef.current?.startMic();
-      } catch (err) {
-        setErrors((e) => [...e, `microphone blocked: ${(err as Error).message}`]);
+      } catch (error) {
+        setErrors((currentErrors) => appendUniqueError(currentErrors, `microphone blocked: ${(error as Error).message}`));
       }
-      if (wsRef.current?.readyState !== WebSocket.OPEN) connect();
       send({ type: 'start', personaId });
     },
-    [connect, send]
+    [send]
   );
 
   const stop = useCallback(() => {
@@ -209,22 +300,24 @@ export function useTarpit() {
   const choosePersona = useCallback(
     (id: string) => {
       if (conn === 'live') send({ type: 'persona', id });
-      else setActivePersona(personas.find((p) => p.id === id) || null);
+      else setActivePersona(personas.find((persona) => persona.id === id) || null);
     },
     [conn, personas, send]
   );
 
   const inject = useCallback(
     (text: string) => {
-      engineRef.current?.ensurePlayback();
+      engineRef.current?.ensurePlayback().catch((error) => {
+        setErrors((currentErrors) => appendUniqueError(currentErrors, `audio playback blocked: ${(error as Error).message}`));
+      });
       send({ type: 'inject', text });
     },
     [send]
   );
 
   const toggleTelephony = useCallback(() => {
-    setTelephony((prev) => {
-      const next = !prev;
+    setTelephony((current) => {
+      const next = !current;
       engineRef.current?.setTelephony(next);
       return next;
     });
@@ -237,9 +330,29 @@ export function useTarpit() {
   }, [muteWhileSpeaking, send]);
 
   return {
-    conn, personas, activePersona, transcript, partial, agentLive, intel, metrics,
-    enrichment, signals, agentSpeaking, inputLevel, outputLevel, health,
-    muteWhileSpeaking, errors, lastIntelAt, telephony,
-    start, stop, choosePersona, inject, toggleMuteWhileSpeaking, toggleTelephony,
+    conn,
+    personas,
+    activePersona,
+    transcript,
+    partial,
+    agentLive,
+    intel,
+    metrics,
+    enrichment,
+    signals,
+    agentSpeaking,
+    inputLevel,
+    outputLevel,
+    health,
+    muteWhileSpeaking,
+    errors,
+    lastIntelAt,
+    telephony,
+    start,
+    stop,
+    choosePersona,
+    inject,
+    toggleMuteWhileSpeaking,
+    toggleTelephony,
   };
 }

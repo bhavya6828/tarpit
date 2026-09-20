@@ -1,180 +1,243 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTarpit } from '@/lib/useTarpit';
 import MetricsRail from './MetricsRail';
 import Transcript from './Transcript';
 import IntelPanel from './IntelPanel';
 import PersonaPicker from './PersonaPicker';
 import CaseFile from './CaseFile';
-import { Dot, Pill } from './ui';
+import { Dot, Panel } from './ui';
+import { resolveServerUrls } from '@/lib/connection';
 
 const SERVER = process.env.NEXT_PUBLIC_TARPIT_SERVER || 'localhost:8787';
-const HTTP = `http://${SERVER}`;
+const PAGE_PROTOCOL = typeof window === 'undefined' ? 'http:' : window.location.protocol;
+const HTTP = resolveServerUrls(SERVER, PAGE_PROTOCOL).http;
+
+type WorkspaceView = 'conversation' | 'evidence' | 'session';
 
 export default function CommandCenter() {
-  const t = useTarpit();
-  const [selected, setSelected] = useState<string>('harold');
-  const [flash, setFlash] = useState(false);
+  const tarpit = useTarpit();
+  const [selected, setSelected] = useState('harold');
   const [showCase, setShowCase] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('conversation');
 
-  const live = t.conn === 'live';
-  const activeId = t.activePersona?.id ?? selected;
-
-  // Screen flash when a critical artifact lands — the moment judges look up.
-  useEffect(() => {
-    if (!t.intel.length) return;
-    if (t.intel[0].severity !== 'critical') return;
-    setFlash(true);
-    const id = setTimeout(() => setFlash(false), 700);
-    return () => clearTimeout(id);
-  }, [t.lastIntelAt, t.intel]);
+  const live = tarpit.conn === 'live';
+  const activeId = tarpit.activePersona?.id ?? selected;
+  const activePersona = tarpit.activePersona ?? tarpit.personas.find((persona) => persona.id === selected) ?? null;
+  const unavailable = tarpit.conn === 'offline' || tarpit.conn === 'connecting';
 
   const pick = (id: string) => {
     setSelected(id);
-    t.choosePersona(id);
+    tarpit.choosePersona(id);
   };
 
   return (
-    <main className="flex h-screen flex-col gap-2 p-2">
-      {showCase && t.metrics?.sessionId && (
-        <CaseFile sessionId={t.metrics.sessionId} serverBase={HTTP} onClose={() => setShowCase(false)} />
+    <main className="workspace-shell min-h-screen bg-canvas lg:h-screen lg:min-h-0">
+      {showCase && tarpit.metrics?.sessionId && (
+        <CaseFile
+          sessionId={tarpit.metrics.sessionId}
+          serverBase={HTTP}
+          onClose={() => setShowCase(false)}
+        />
       )}
 
-      {flash && (
-        <div className="flash-screen pointer-events-none fixed inset-0 z-[98] bg-crit/12" />
-      )}
-
-      {/* ─── header ─────────────────────────────────────────────────────── */}
-      <header className="panel flex shrink-0 items-center gap-4 px-3 py-2">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[17px] font-bold tracking-[0.3em] text-phos glow-phos">TARPIT</span>
-          <span className="hidden text-[10px] tracking-wider text-dimmer uppercase lg:inline">
-            autonomous scam-baiter
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 border-l border-edge pl-4">
-          <Dot on={live} color={live ? 'var(--color-crit)' : 'var(--color-dimmer)'} />
-          <span className={`text-[11px] tracking-wider uppercase ${live ? 'text-crit' : 'text-dimmer'}`}>
-            {live ? 'engagement live' : t.conn === 'ended' ? 'engagement closed' : 'standby'}
-          </span>
-          {t.metrics?.sessionId && live && (
-            <span className="ml-1 text-[10px] text-dimmer">#{t.metrics.sessionId}</span>
-          )}
-        </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          <PersonaPicker personas={t.personas} activeId={activeId} onPick={pick} live={live} />
-
-          <div className="hidden items-center gap-1.5 border-l border-edge pl-3 xl:flex">
-            <Svc on={!!t.health?.services.deepgram} name="deepgram" />
-            <Svc on={!!t.health?.services.elevenlabs} name="11labs" />
-            <Svc on={!!t.health?.services.openai} name="openai" />
-            <Svc on={t.health?.services.elastic === 'elastic'} name="elastic" />
+      <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col px-3 py-3 sm:px-5 sm:py-4 lg:h-screen lg:min-h-0 lg:px-6">
+        <header className="flex shrink-0 flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent font-serif text-lg text-white">
+              T
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <h1 className="font-serif text-2xl tracking-[-0.04em] text-text">Tarpit</h1>
+                <span className="hidden text-xs text-muted md:inline">Scam call defense</span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+                <Dot on={tarpit.conn !== 'offline'} color={live ? 'var(--color-danger)' : 'var(--color-positive)'} />
+                <span>{connectionLabel(tarpit.conn)}</span>
+                {tarpit.metrics?.sessionId && <span className="font-mono text-[10px] text-faint">{tarpit.metrics.sessionId}</span>}
+              </div>
+            </div>
           </div>
 
-          <button
-            onClick={t.toggleTelephony}
-            title="Band-limit the persona to 300-3400Hz with line compression and room tone — what the caller actually hears down a phone. Turn it off to hear the raw studio audio."
-            className={`rounded-sm border px-2 py-1 text-[10px] tracking-wider uppercase transition-colors ${
-              t.telephony ? 'border-phos/50 text-phos' : 'border-edge text-dim hover:text-ink'
-            }`}
-          >
-            phone line {t.telephony ? 'on' : 'off'}
-          </button>
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <button
+              type="button"
+              onClick={() => setShowCase(true)}
+              disabled={!tarpit.metrics?.sessionId}
+              className="rounded-md border border-border bg-surface px-3 py-2.5 text-sm font-semibold text-text transition-colors hover:border-border-strong hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Open report
+            </button>
+            <button
+              type="button"
+              onClick={() => (live ? tarpit.stop() : tarpit.start(selected))}
+              disabled={unavailable}
+              className={`flex-1 rounded-md px-4 py-2.5 text-sm font-semibold transition-transform active:scale-[0.98] sm:flex-none ${
+                live ? 'bg-danger text-white' : 'bg-accent text-white'
+              } disabled:cursor-not-allowed disabled:opacity-35`}
+            >
+              {live ? 'End engagement' : 'Start engagement'}
+            </button>
+          </div>
+        </header>
 
-          <button
-            onClick={t.toggleMuteWhileSpeaking}
-            title="Half-duplex: stop sending mic audio while the persona is speaking. Use this when demoing on loudspeakers."
-            className={`rounded-sm border px-2 py-1 text-[10px] tracking-wider uppercase transition-colors ${
-              t.muteWhileSpeaking ? 'border-amber/50 text-amber' : 'border-edge text-dim hover:text-ink'
-            }`}
-          >
-            half-duplex {t.muteWhileSpeaking ? 'on' : 'off'}
-          </button>
+        {((tarpit.health && !tarpit.health.ok) || tarpit.errors.length > 0) && (
+          <div role="alert" className="mt-3 shrink-0 rounded-lg border border-warning/20 bg-warning-soft px-4 py-3 text-sm text-warning">
+            {tarpit.health && !tarpit.health.ok && (
+              <span>Missing service keys: {tarpit.health.missing.join(', ')}. </span>
+            )}
+            {tarpit.errors.slice(-1)[0]}
+          </div>
+        )}
 
-          <button
-            onClick={() => setShowCase(true)}
-            disabled={!t.metrics?.sessionId}
-            title="Generate the law-enforcement referral package: case file, STIX 2.1 bundle, and FTC pre-fill."
-            className="rounded-sm border border-edge px-2 py-1 text-[10px] tracking-wider text-dim uppercase transition-colors hover:border-amber/50 hover:text-amber disabled:opacity-30"
-          >
-            referral
-          </button>
+        <nav aria-label="Workspace views" className="mt-3 grid shrink-0 grid-cols-3 rounded-lg border border-border bg-surface p-1 lg:hidden">
+          <MobileTab active={workspaceView === 'conversation'} onClick={() => setWorkspaceView('conversation')}>Conversation</MobileTab>
+          <MobileTab active={workspaceView === 'evidence'} onClick={() => setWorkspaceView('evidence')}>Evidence</MobileTab>
+          <MobileTab active={workspaceView === 'session'} onClick={() => setWorkspaceView('session')}>Session</MobileTab>
+        </nav>
 
-          <button
-            onClick={() => (live ? t.stop() : t.start(selected))}
-            disabled={t.conn === 'offline' || t.conn === 'connecting'}
-            className={`rounded-sm border px-4 py-1.5 text-[11px] font-bold tracking-[0.18em] uppercase transition-all disabled:opacity-30 ${
-              live
-                ? 'border-crit text-crit hover:bg-crit/12'
-                : 'border-phos text-phos hover:bg-phos/12'
-            }`}
-          >
-            {live ? '■ end call' : '▶ arm tarpit'}
-          </button>
+        <div className="mt-3 grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_minmax(420px,1fr)_340px]">
+          <aside className={`${workspaceView === 'session' ? 'flex' : 'hidden'} min-h-0 flex-col gap-3 overflow-y-auto pb-4 lg:flex lg:pb-0`} aria-label="Session">
+            <Panel title="Session setup" bodyClass="space-y-5 p-4">
+              <div>
+                <p className="label mb-2">Persona</p>
+                {tarpit.personas.length > 0 ? (
+                  <PersonaPicker personas={tarpit.personas} activeId={activeId} onPick={pick} live={live} />
+                ) : (
+                  <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted">Personas load when the local server connects.</p>
+                )}
+              </div>
+
+              <div>
+                <p className="label mb-2">Audio behavior</p>
+                <div className="space-y-2">
+                  <Toggle
+                    label="Phone line effect"
+                    detail="Adds realistic call-band audio"
+                    pressed={tarpit.telephony}
+                    onClick={tarpit.toggleTelephony}
+                  />
+                  <Toggle
+                    label="Half-duplex"
+                    detail="Mutes the mic while persona speaks"
+                    pressed={tarpit.muteWhileSpeaking}
+                    onClick={tarpit.toggleMuteWhileSpeaking}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <p className="label mb-2">Services</p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <Service on={!!tarpit.health?.services.deepgram} name="Deepgram" />
+                  <Service on={!!tarpit.health?.services.elevenlabs} name="ElevenLabs" />
+                  <Service on={!!tarpit.health?.services.openai} name="OpenAI" />
+                  <Service on={tarpit.health?.services.elastic === 'elastic'} name="Elastic" />
+                </div>
+              </div>
+            </Panel>
+
+            <MetricsRail
+              metrics={tarpit.metrics}
+              persona={activePersona}
+              live={live}
+              agentSpeaking={tarpit.agentSpeaking}
+              inputLevel={tarpit.inputLevel}
+              outputLevel={tarpit.outputLevel}
+              signals={tarpit.signals}
+            />
+          </aside>
+
+          <section className={`${workspaceView === 'conversation' ? 'flex' : 'hidden'} min-h-0 flex-col lg:flex`} aria-label="Conversation">
+            <Transcript
+              lines={tarpit.transcript}
+              partial={tarpit.partial}
+              agentLive={tarpit.agentLive}
+              persona={activePersona}
+              live={live}
+              onInject={tarpit.inject}
+            />
+          </section>
+
+          <aside className={`${workspaceView === 'evidence' ? 'flex' : 'hidden'} min-h-0 flex-col overflow-y-auto pb-4 lg:flex lg:pb-0`} aria-label="Evidence">
+            <IntelPanel intel={tarpit.intel} enrichment={tarpit.enrichment} serverBase={HTTP} />
+          </aside>
         </div>
-      </header>
 
-      {/* ─── missing-key / error banner ─────────────────────────────────── */}
-      {(t.health && !t.health.ok) || t.errors.length > 0 ? (
-        <div className="panel shrink-0 border-amber/30 px-3 py-1.5 text-[11px] text-amber">
-          {t.health && !t.health.ok && (
-            <span>missing keys in .env: {t.health.missing.join(', ')} — </span>
-          )}
-          {t.errors.slice(-1)[0]}
-        </div>
-      ) : null}
-
-      {/* ─── main grid ──────────────────────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_370px]">
-        <div className="hidden min-h-0 lg:block">
-          <MetricsRail
-            metrics={t.metrics}
-            persona={t.activePersona ?? t.personas.find((p) => p.id === selected) ?? null}
-            live={live}
-            agentSpeaking={t.agentSpeaking}
-            inputLevel={t.inputLevel}
-            outputLevel={t.outputLevel}
-            signals={t.signals}
-          />
-        </div>
-
-        <div className="flex min-h-0 flex-col">
-          <Transcript
-            lines={t.transcript}
-            partial={t.partial}
-            agentLive={t.agentLive}
-            persona={t.activePersona ?? t.personas.find((p) => p.id === selected) ?? null}
-            live={live}
-            onInject={t.inject}
-          />
-        </div>
-
-        <div className="hidden min-h-0 xl:block">
-          <IntelPanel intel={t.intel} enrichment={t.enrichment} serverBase={HTTP} />
-        </div>
+        <footer className="hidden shrink-0 items-center gap-3 pt-3 text-[11px] text-faint lg:flex">
+          <span>Use headphones to prevent the persona from hearing its own voice.</span>
+          <span className="ml-auto font-mono">
+            {tarpit.health?.models.stt || 'STT'} / {tarpit.health?.models.llm || 'LLM'} / {tarpit.health?.models.tts || 'TTS'}
+          </span>
+        </footer>
       </div>
-
-      {/* ─── footer ─────────────────────────────────────────────────────── */}
-      <footer className="flex shrink-0 items-center gap-3 px-1 text-[10px] text-dimmer">
-        <span>
-          deepgram {t.health?.models.stt} → openai {t.health?.models.llm} → elevenlabs{' '}
-          {t.health?.models.tts}
-        </span>
-        <span className="ml-auto flex items-center gap-2">
-          <Pill tone={t.conn === 'offline' ? 'crit' : 'dim'}>bridge {t.conn}</Pill>
-          <span>headphones recommended — prevents the persona hearing itself</span>
-        </span>
-      </footer>
     </main>
   );
 }
 
-function Svc({ on, name }: { on: boolean; name: string }) {
+function connectionLabel(conn: string) {
+  if (conn === 'live') return 'Engagement live';
+  if (conn === 'ready') return 'Ready to start';
+  if (conn === 'connecting') return 'Connecting to local server';
+  if (conn === 'ended') return 'Engagement ended';
+  return 'Server offline';
+}
+
+function MobileTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <span className="flex items-center gap-1 text-[10px] text-dim">
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`rounded-md px-2 py-2 text-xs font-semibold ${active ? 'bg-accent text-white' : 'text-muted'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Toggle({
+  label,
+  detail,
+  pressed,
+  onClick,
+}: {
+  label: string;
+  detail: string;
+  pressed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:border-border-strong"
+    >
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${pressed ? 'bg-positive' : 'bg-border-strong'}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${pressed ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </span>
+      <span>
+        <span className="block text-xs font-semibold text-text">{label}</span>
+        <span className="mt-0.5 block text-[10px] leading-snug text-muted">{detail}</span>
+      </span>
+    </button>
+  );
+}
+
+function Service({ on, name }: { on: boolean; name: string }) {
+  return (
+    <span className="flex items-center gap-2 text-xs text-muted">
       <Dot on={on} />
       {name}
     </span>

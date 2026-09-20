@@ -2,6 +2,7 @@ import { Client } from '@elastic/elasticsearch';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
+import { redactIntelItem, redactPaymentText } from './redact.js';
 
 const INTEL_INDEX = 'tarpit-intel';
 const SESSION_INDEX = 'tarpit-sessions';
@@ -16,8 +17,11 @@ const DATA_DIR = path.resolve(process.cwd(), 'data');
  * slow is a demo that dies. Everything written here also lands in memory and
  * on disk as JSONL, so the UI is served from the same shape either way.
  */
-class Store {
-  constructor() {
+export class Store {
+  constructor({ dataDir = DATA_DIR, elastic = config.elastic, createClient = (options) => new Client(options) } = {}) {
+    this.dataDir = dataDir;
+    this.elasticConfig = elastic;
+    this.createClient = createClient;
     this.client = null;
     this.connected = false;
     this.mode = 'memory';
@@ -26,9 +30,10 @@ class Store {
   }
 
   async init() {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(this.dataDir, { recursive: true });
+    this.#loadLocal();
 
-    const { cloudId, apiKey, node, username, password } = config.elastic;
+    const { cloudId, apiKey, node, username, password } = this.elasticConfig;
     let opts = null;
     if (cloudId && apiKey) {
       opts = { cloud: { id: cloudId }, auth: { apiKey } };
@@ -47,7 +52,7 @@ class Store {
     }
 
     try {
-      this.client = new Client({ ...opts, requestTimeout: 5000, maxRetries: 2 });
+      this.client = this.createClient({ ...opts, requestTimeout: 5000, maxRetries: 2 });
       await this.client.ping();
       await this.#ensureIndices();
       this.connected = true;
@@ -118,19 +123,48 @@ class Store {
 
   #appendFile(name, doc) {
     try {
-      fs.appendFileSync(path.join(DATA_DIR, `${name}.jsonl`), `${JSON.stringify(doc)}\n`);
+      fs.appendFileSync(path.join(this.dataDir, `${name}.jsonl`), `${JSON.stringify(doc)}\n`);
     } catch {}
+  }
+
+  #readFile(name) {
+    try {
+      return fs
+        .readFileSync(path.join(this.dataDir, `${name}.jsonl`), 'utf8')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .flatMap((line) => {
+          try {
+            return [JSON.parse(line)];
+          } catch {
+            return [];
+          }
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  #loadLocal() {
+    const sessions = new Map();
+    for (const doc of this.#readFile('sessions')) sessions.set(doc.session_id, doc);
+    this.mem = {
+      sessions,
+      intel: this.#readFile('intel'),
+      utterances: this.#readFile('utterances'),
+    };
   }
 
   async indexIntel(docs) {
     if (!docs?.length) return;
-    this.mem.intel.push(...docs);
-    for (const d of docs) this.#appendFile('intel', d);
+    const safeDocs = docs.map((doc) => redactIntelItem(doc, docs));
+    this.mem.intel.push(...safeDocs);
+    for (const d of safeDocs) this.#appendFile('intel', d);
     if (!this.connected) return;
     try {
       await this.client.bulk({
         refresh: false,
-        operations: docs.flatMap((d) => [{ index: { _index: INTEL_INDEX, _id: d.id } }, d]),
+        operations: safeDocs.flatMap((d) => [{ index: { _index: INTEL_INDEX, _id: d.id } }, d]),
       });
     } catch (err) {
       console.warn('[elastic] intel bulk failed:', err.message);
@@ -138,11 +172,12 @@ class Store {
   }
 
   async indexUtterance(doc) {
-    this.mem.utterances.push(doc);
-    this.#appendFile('utterances', doc);
+    const safeDoc = { ...doc, text: redactPaymentText(doc.text) };
+    this.mem.utterances.push(safeDoc);
+    this.#appendFile('utterances', safeDoc);
     if (!this.connected) return;
     try {
-      await this.client.index({ index: UTTERANCE_INDEX, document: doc });
+      await this.client.index({ index: UTTERANCE_INDEX, document: safeDoc });
     } catch {}
   }
 
