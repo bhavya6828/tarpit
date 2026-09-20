@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { AudioEngine } from '../web/lib/audio.ts';
 import { bridgeOfflineMessage, emptySessionView, normalizeInjectedText } from '../web/lib/sessionView.ts';
 
+const readWebFile = (path) => readFileSync(new URL(`../web/${path}`, import.meta.url), 'utf8');
+
 test('Next uses a patched PostCSS release', () => {
   const lock = JSON.parse(readFileSync(new URL('../web/package-lock.json', import.meta.url)));
   const version = lock.packages['node_modules/next/node_modules/postcss']?.version
@@ -64,4 +66,34 @@ test('audio flush stops queued sources and resets playback state', () => {
   assert.equal(engine.queuedForTurn, 0);
   assert.equal(engine.playingTurn, -1);
   assert.equal(engine.nextStart, 12);
+});
+
+test('command center keeps every work area reachable on narrow screens', () => {
+  const source = readWebFile('components/CommandCenter.tsx');
+
+  assert.match(source, /aria-label="Workspace views"/);
+  assert.match(source, />Conversation</);
+  assert.match(source, />Evidence</);
+  assert.match(source, />Session</);
+  assert.doesNotMatch(source, /hidden min-h-0 lg:block/);
+});
+
+test('command center uses the minimal warm visual system', () => {
+  const css = readWebFile('app/globals.css');
+  const layout = readWebFile('app/layout.tsx');
+
+  assert.match(css, /--color-canvas:\s*#f7f6f2/i);
+  assert.match(css, /--color-surface:\s*#ffffff/i);
+  assert.match(css, /--color-text:\s*#20211f/i);
+  assert.match(css, /--color-accent:\s*#20211f/i);
+  assert.doesNotMatch(css, /repeating-linear-gradient|scanline|glow-phos|--color-void/i);
+  assert.doesNotMatch(layout, /\bInter\b|--font-inter/);
+});
+
+test('referral package is exposed as an accessible dialog', () => {
+  const source = readWebFile('components/CaseFile.tsx');
+
+  assert.match(source, /role="dialog"/);
+  assert.match(source, /aria-modal="true"/);
+  assert.match(source, /aria-labelledby="case-file-title"/);
 });

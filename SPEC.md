@@ -74,6 +74,27 @@ codec negotiated at construction.
 | `web/lib/audio.ts` | Mic capture, gapless PCM playback, telephony colouration |
 | `web/lib/useTarpit.ts` | WebSocket protocol client and UI state |
 
+### 2.1 Browser interface
+
+The browser command center is a calm incident workspace built around one primary
+workflow: choose a persona, start an engagement, follow the conversation, review
+captured evidence, and open the referral package.
+
+- The default desktop layout keeps Session, Conversation, and Evidence visible in
+  three clear work areas without decorative command-center effects.
+- Narrow viewports provide labeled tabs for all three work areas. Metrics and intel
+  remain reachable on mobile rather than disappearing.
+- The start or end engagement action is the only visually dominant control.
+- Persona choice, phone-line audio, half-duplex audio, and referral access are grouped
+  by task and use plain labels.
+- Normal, empty, connecting, live, ended, missing-key, and offline states remain
+  understandable without relying on color alone.
+- The visual system uses a warm neutral canvas, white surfaces, charcoal text, subtle
+  borders, one dark primary action, and muted semantic status colors. It has no CRT
+  scanlines, neon glow, gradients, or large decorative effects.
+- Keyboard focus is visible. The referral package is an accessible modal dialog that
+  closes with Escape and has a labeled close control.
+
 ---
 
 ## 3. Non-goals
