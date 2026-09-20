@@ -31,7 +31,9 @@ export default function MetricsRail({
   const seconds = metrics?.secondsWasted ?? 0;
 
   return (
-    <div className="flex min-h-0 flex-col gap-3">
+    // The group itself must not compress either, or its panels overflow into
+    // whatever follows it in the rail.
+    <div className="flex shrink-0 flex-col gap-3">
       {/* The one number a judge should be able to read from across the room. */}
       <Panel title="Engagement" bodyClass="p-4">
         <div className="flex items-center gap-2">

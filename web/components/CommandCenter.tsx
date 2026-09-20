@@ -120,6 +120,17 @@ export default function CommandCenter() {
             aria-labelledby="session-tab"
             className={`${workspaceView === 'session' ? 'flex' : 'hidden'} min-h-0 flex-col gap-4 overflow-y-auto pb-4 xl:flex xl:pb-0`}
           >
+            {live ? (
+              <>
+            <MetricsRail
+              metrics={honeypot.metrics}
+              persona={activePersona}
+              live={live}
+              agentSpeaking={honeypot.agentSpeaking}
+              inputLevel={honeypot.inputLevel}
+              outputLevel={honeypot.outputLevel}
+              signals={honeypot.signals}
+            />
             <Panel title="Session setup" bodyClass="space-y-5 p-4">
               <div>
                 <p className="label mb-2">Persona</p>
@@ -158,7 +169,47 @@ export default function CommandCenter() {
                 </div>
               </div>
             </Panel>
+              </>
+            ) : (
+              <>
+            <Panel title="Session setup" bodyClass="space-y-5 p-4">
+              <div>
+                <p className="label mb-2">Persona</p>
+                {honeypot.personas.length > 0 ? (
+                  <PersonaPicker personas={honeypot.personas} activeId={activeId} onPick={pick} live={live} />
+                ) : (
+                  <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted">Personas load when the local server connects.</p>
+                )}
+              </div>
 
+              <div>
+                <p className="label mb-2">Audio behavior</p>
+                <div className="space-y-2">
+                  <Toggle
+                    label="Phone line effect"
+                    detail="Adds realistic call-band audio"
+                    pressed={honeypot.telephony}
+                    onClick={honeypot.toggleTelephony}
+                  />
+                  <Toggle
+                    label="Half-duplex"
+                    detail="Mutes the mic while persona speaks"
+                    pressed={honeypot.muteWhileSpeaking}
+                    onClick={honeypot.toggleMuteWhileSpeaking}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <p className="label mb-2">Services</p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <Service on={!!honeypot.health?.services.deepgram} name="Deepgram" />
+                  <Service on={!!honeypot.health?.services.elevenlabs} name="ElevenLabs" />
+                  <Service on={!!honeypot.health?.services.openai} name="OpenAI" />
+                  <Service on={honeypot.health?.services.elastic === 'elastic'} name="Elastic" />
+                </div>
+              </div>
+            </Panel>
             <MetricsRail
               metrics={honeypot.metrics}
               persona={activePersona}
@@ -168,6 +219,10 @@ export default function CommandCenter() {
               outputLevel={honeypot.outputLevel}
               signals={honeypot.signals}
             />
+              </>
+            )}
+
+
           </aside>
 
           <section

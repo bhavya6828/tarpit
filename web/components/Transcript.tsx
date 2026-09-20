@@ -50,8 +50,8 @@ export default function Transcript({
       >
         {lines.length === 0 && !partial && !agentLive && (
           <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center py-16 text-center">
-            <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-canvas display text-xl text-text">
-              T
+            <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-canvas text-xl font-bold text-accent">
+              H
             </span>
             <h3 className="display text-2xl text-text">Ready when you are</h3>
             <p className="mt-3 text-sm leading-relaxed text-muted">

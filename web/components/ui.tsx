@@ -16,7 +16,9 @@ export function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`panel flex min-h-0 flex-col ${className}`}>
+    // shrink-0 by default: a panel compressed below its content height spills
+    // over the panel beneath it instead of letting its column scroll.
+    <section className={`panel flex min-h-0 shrink-0 flex-col ${className}`}>
       {title && (
         <header className="flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-text">{title}</h2>

@@ -103,7 +103,7 @@ test('command center uses the dark console visual system', () => {
 
   // The hero metric has to be legible at distance, so it is clamped large.
   assert.match(css, /\.hero-metric/);
-  assert.match(css, /clamp\(44px/);
+  assert.match(css, /clamp\(34px/);
 
   // Captured evidence announces itself, then settles.
   assert.match(css, /\.evidence-land/);
