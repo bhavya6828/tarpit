@@ -29,14 +29,31 @@ export default function IntelPanel({
   } | null>(null);
 
   useEffect(() => {
-    const poll = () =>
-      fetch(`${serverBase}/api/intel/summary`)
-        .then((response) => response.json())
-        .then(setSummary)
-        .catch(() => {});
-    poll();
-    const timer = setInterval(poll, 5000);
-    return () => clearInterval(timer);
+    let active = true;
+    let controller: AbortController | null = null;
+
+    const poll = async () => {
+      controller?.abort();
+      const current = new AbortController();
+      controller = current;
+      try {
+        const response = await fetch(`${serverBase}/api/intel/summary`, { signal: current.signal });
+        if (!response.ok) throw new Error(`summary ${response.status}`);
+        const payload = await response.json();
+        if (active && controller === current) setSummary(payload);
+      } catch (error) {
+        const aborted = error instanceof DOMException && error.name === 'AbortError';
+        if (active && controller === current && !aborted) setSummary(null);
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      controller?.abort();
+    };
   }, [serverBase]);
 
   const critical = intel.filter((item) => item.severity === 'critical').length;

@@ -8,9 +8,11 @@ import IntelPanel from './IntelPanel';
 import PersonaPicker from './PersonaPicker';
 import CaseFile from './CaseFile';
 import { Dot, Panel } from './ui';
+import { resolveServerUrls } from '@/lib/connection';
 
 const SERVER = process.env.NEXT_PUBLIC_TARPIT_SERVER || 'localhost:8787';
-const HTTP = `http://${SERVER}`;
+const PAGE_PROTOCOL = typeof window === 'undefined' ? 'http:' : window.location.protocol;
+const HTTP = resolveServerUrls(SERVER, PAGE_PROTOCOL).http;
 
 type WorkspaceView = 'conversation' | 'evidence' | 'session';
 

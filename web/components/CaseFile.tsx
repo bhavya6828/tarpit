@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const ACCESS_TOKEN = process.env.NEXT_PUBLIC_TARPIT_TOKEN || '';
 
@@ -30,12 +30,27 @@ export default function CaseFile({
   const [data, setData] = useState<CaseFileData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    fetch(`${serverBase}/api/report/${sessionId}`)
+    mounted.current = true;
+    const controller = new AbortController();
+    setData(null);
+    setError(null);
+
+    fetch(`${serverBase}/api/report/${sessionId}`, { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`${response.status}`))))
-      .then(setData)
-      .catch((reason) => setError(String(reason.message)));
+      .then((payload) => {
+        if (mounted.current) setData(payload);
+      })
+      .catch((reason) => {
+        if (mounted.current && reason?.name !== 'AbortError') setError(String(reason.message));
+      });
+
+    return () => {
+      mounted.current = false;
+      controller.abort();
+    };
   }, [sessionId, serverBase]);
 
   useEffect(() => {
@@ -52,9 +67,11 @@ export default function CaseFile({
         headers: ACCESS_TOKEN ? { 'X-Tarpit-Token': ACCESS_TOKEN } : {},
       });
       const result = await response.json();
-      setDispatchStatus(result.dispatched ? `Delivered (HTTP ${result.status})` : `Not sent: ${result.reason}`);
+      if (mounted.current) {
+        setDispatchStatus(result.dispatched ? `Delivered (HTTP ${result.status})` : `Not sent: ${result.reason}`);
+      }
     } catch (reason) {
-      setDispatchStatus(`Failed: ${(reason as Error).message}`);
+      if (mounted.current) setDispatchStatus(`Failed: ${(reason as Error).message}`);
     }
   };
 
