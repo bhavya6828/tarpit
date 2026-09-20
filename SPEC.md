@@ -162,6 +162,39 @@ monitor broadcast, so the UI lights up without anyone pressing a button.
 
 ---
 
+## 4.2 Screening: deciding a call is a scam
+
+Until now the operator decided. Somebody recognised a scam and pressed a button, which
+is a demonstration rather than a product: a real number rings when nobody is watching,
+and the system has to reach that judgement itself.
+
+Screening runs in two stages and reuses machinery already present.
+
+**Before the caller speaks.** Inbound signalling carries evidence (see §9). A
+STIR/SHAKEN grade of `C`, `failed`, or absent means the originating carrier cannot
+vouch for the caller ID, which is the strongest single pre-speech indicator. Line type
+and whether the number is known adjust it further. This yields a prior, never a
+verdict, because a spoofed number is not proof of intent.
+
+**After the caller speaks.** The persona answers neutrally and lets them state their
+business. The same extraction that collects evidence scores it: impersonated authority,
+coercion, a demanded payment rail and remote-access tooling all raise the score, while
+markers of an ordinary call lower it.
+
+| Phase | Meaning | Behaviour |
+|---|---|---|
+| `screening` | answered, not yet judged | neutral, brief, gives nothing away |
+| `engaged` | scored as fraud | full persona, evidence collection |
+| `released` | scored as ordinary | says a human will call back, ends |
+
+Two thresholds rather than one, because the costs are asymmetric. Engaging a real
+caller wastes a stranger's time, so engagement requires a decisive score. Releasing a
+real scammer merely loses evidence we never had, so release only needs the call to look
+ordinary after enough has been said to tell.
+
+A call that reaches neither threshold stays in screening. Ambiguity is a state, not a
+failure, and the neutral persona is a safe place to remain.
+
 ## 5. The real-time loop
 
 ### 5.1 Turn detection
