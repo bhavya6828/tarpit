@@ -1,4 +1,4 @@
-# Tarpit — Technical Specification
+# Tarpit, Technical Specification
 
 > Status: implemented and running, except where marked **Not built**.
 > This document describes what the code actually does. Aspirational behaviour is
@@ -21,7 +21,7 @@ and harvests the caller's payment infrastructure while doing it.
 - Correlate artifacts across engagements.
 - Produce a filing-ready referral package.
 
-**Explicitly out of scope** — see §3.
+**Explicitly out of scope**: see §3.
 
 ---
 
@@ -121,7 +121,7 @@ process. Fewer conversions, less latency, fewer failure modes.
 
 1. Inbound call → Twilio POSTs `/twilio/voice`.
 2. Request signature validated against `TWILIO_AUTH_TOKEN` (HMAC-SHA1 over URL +
-   sorted params). Rejected with 403 on mismatch. **This is load-bearing** — a tunnel
+   sorted params). Rejected with 403 on mismatch. **This is load-bearing**: a tunnel
    is a public URL, and without it the number is an open telephony relay.
 3. Caller dossier assembled (§9) and stashed by `CallSid`, TTL 60 s.
 4. TwiML returns `<Connect><Stream>` pointing at `wss://…/twilio`.
@@ -147,7 +147,7 @@ numerals=true          filler_words=true
 ```
 
 A turn is flushed on `speech_final`, with `UtteranceEnd` as a backstop. `numerals=true`
-is not cosmetic — it is what converts dictated digits into a form the checksum
+is not cosmetic, it is what converts dictated digits into a form the checksum
 validators can act on.
 
 ### 5.2 Barge-in
@@ -158,14 +158,14 @@ itself.
 
 Guards:
 
-- `SPEAK_GRACE_MS = 700` — ignore interruptions in the first 700 ms of agent speech.
+- `SPEAK_GRACE_MS = 700`, ignore interruptions in the first 700 ms of agent speech.
 - Minimum two recognized words.
 
 On trigger: abort the in-flight completion, cancel the TTS socket, increment `turnId`
 to invalidate in-flight audio, emit `audio_flush`, and (on Twilio) send `clear`.
 
 Aborted completions are **not** surfaced as errors. The OpenAI SDK raises a plain
-`Error` rather than a `DOMException`, so `isAbort()` matches on name *and* message —
+`Error` rather than a `DOMException`, so `isAbort()` matches on name *and* message -
 otherwise every interruption paints a red error in the UI mid-demo.
 
 ### 5.3 Latency budget
@@ -240,17 +240,17 @@ Four, each a `systemPrompt` composed of character text plus a shared **doctrine*
 
 ### Doctrine (the load-bearing part)
 
-- **Dangling carrot** — always about to comply, never refusing. Obstacles rotate
+- **Dangling carrot**, always about to comply, never refusing. Obstacles rotate
   between categories; never two of a kind consecutively.
 - **Hard 25-word ceiling, target 10–15.** Counterintuitive but central: you do not
-  waste a scammer's time by talking at them — a monologue lets them mute you and work
+  waste a scammer's time by talking at them, a monologue lets them mute you and work
   another victim. Short turns force *them* to keep responding. Ten exchanges beat one
   speech. This single constraint cut average reply length ~45%.
 - **Hand the ball back.** End turns requiring a response. Dead air is a hang-up cue.
 - **Harvest as confusion.** Asking a caller to repeat and spell payment details is
   in-character for a confused target and is the primary intel mechanism. Reading a
   long number back *wrong* is the highest-yield time-waster available.
-- **Plain spoken text only** — output is read aloud; no markdown, emoji, or stage
+- **Plain spoken text only**, output is read aloud; no markdown, emoji, or stage
   directions.
 
 Mid-call persona swap is supported and framed in-narrative as handing the phone to
@@ -317,16 +317,16 @@ values.
 
 Three Elasticsearch indices, created on boot if absent.
 
-**`tarpit-intel`** — one document per artifact.
+**`tarpit-intel`**, one document per artifact.
 `@timestamp`, `session_id`, `type`, `label`, `value`, `severity`, `score`, `speaker`,
 `source_utterance`, `meta`
 
-**`tarpit-sessions`** — one document per engagement.
+**`tarpit-sessions`**, one document per engagement.
 `@timestamp`, `session_id`, `persona`, `transport`, `status`, `seconds_wasted`,
 `cost_destroyed_usd`, `turns`, `intel_count`, `scam_type`, `claimed_org`,
 `payment_rail`, `caller_number`, `caller_carrier`, `caller_attestation`
 
-**`tarpit-utterances`** — one document per line of dialogue.
+**`tarpit-utterances`**, one document per line of dialogue.
 `@timestamp`, `session_id`, `speaker`, `text`, `persona`
 
 Every write also lands in memory and appends to `data/*.jsonl`. Elastic is never on
@@ -351,7 +351,7 @@ Replaces the IP-address non-goal with signals that actually exist on a phone net
 |---|---|---|
 | A | carrier vouches for the number and the caller's right to use it | no |
 | B | carrier knows the customer but not that they own the number | no |
-| C | gateway attestation — carrier cannot vouch | **yes** |
+| C | gateway attestation, carrier cannot vouch | **yes** |
 | `failed` | failed cryptographic validation | **yes** |
 | `none` | carrier signed nothing | **yes** |
 
@@ -392,25 +392,25 @@ Server → client, JSON events plus binary audio framed as
 `audio_flush` · `interrupted` · `state` · `metrics` · `intel` · `enrichment` ·
 `signals` · `nudge` · `error` · `pong`
 
-`inject` feeds text as though the caller had spoken it — same pipeline, no microphone.
+`inject` feeds text as though the caller had spoken it, same pipeline, no microphone.
 It is the UI's type-to-talk box and the demo's mic-failure fallback.
 
 ---
 
 ## 11. Referral packages
 
-**Case file** — engagement metadata, classification, caller forensics, every artifact
+**Case file**, engagement metadata, classification, caller forensics, every artifact
 with its validation result, full transcript, cross-engagement correlation, and
 disclosure block.
 
-**STIX 2.1 bundle** — `identity` + one `indicator` per artifact + a `report` linking
+**STIX 2.1 bundle**, `identity` + one `indicator` per artifact + a `report` linking
 them. Patterns use standard SCOs where they exist (`email-addr`, `domain-name`,
 `ipv4-addr`) and `x-` custom objects where STIX has no native type (crypto wallets,
 phone numbers, bank accounts). Confidence derives from severity. This is the format
-carriers, ISACs and bank fraud teams ingest by machine — realistically where this
+carriers, ISACs and bank fraud teams ingest by machine, realistically where this
 intel lands.
 
-**FTC pre-fill** — field-by-field values for `reportfraud.ftc.gov`, with the narrative
+**FTC pre-fill**, field-by-field values for `reportfraud.ftc.gov`, with the narrative
 composed from the classification and captured payment destinations.
 
 **Correlation** is the part that turns data into intelligence: if a wallet or routing
@@ -479,7 +479,7 @@ record stays clean.
 Learned the hard way; documented so they are not reintroduced.
 
 **Deepgram finalizes on heard silence, not absent audio.** A stream that stops sending
-bytes leaves the last utterance unfinalized indefinitely — and that utterance is the
+bytes leaves the last utterance unfinalized indefinitely, and that utterance is the
 one most likely to contain payment details. Half-duplex mode therefore transmits
 digital silence rather than sending nothing.
 
@@ -503,18 +503,18 @@ scammer's time, not more.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DEEPGRAM_API_KEY` | — | required |
+| `DEEPGRAM_API_KEY` |, | required |
 | `DEEPGRAM_MODEL` | `nova-3` | |
-| `ELEVENLABS_API_KEY` | — | required |
+| `ELEVENLABS_API_KEY` |, | required |
 | `ELEVENLABS_MODEL` | `eleven_turbo_v2_5` | |
-| `OPENAI_API_KEY` | — | required |
+| `OPENAI_API_KEY` |, | required |
 | `OPENAI_MODEL` | `gpt-4o` | persona |
 | `OPENAI_EXTRACT_MODEL` | `gpt-4o-mini` | classifier |
-| `ELASTIC_NODE` / `ELASTIC_CLOUD_ID` + `ELASTIC_API_KEY` | — | optional |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | — | optional |
+| `ELASTIC_NODE` / `ELASTIC_CLOUD_ID` + `ELASTIC_API_KEY` |, | optional |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` |, | optional |
 | `TWILIO_NUMBER`, `TWILIO_PERSONA` | `harold` | |
-| `PUBLIC_URL` | — | tunnel origin for TwiML |
-| `REPORT_WEBHOOK_URL` | — | referral dispatch target |
+| `PUBLIC_URL` |, | tunnel origin for TwiML |
+| `REPORT_WEBHOOK_URL` |, | referral dispatch target |
 | `SCAMMER_COST_PER_MINUTE` | `0.42` | metrics |
 | `AVG_SCAM_CALL_SECONDS` | `270` | metrics |
 | `VOICE_HAROLD` / `_DALE` / `_KEVIN` / `_BRENDA` | preset ids | voice override |
@@ -524,7 +524,7 @@ scammer's time, not more.
 ## 16. Testing
 
 `npm run simulate` synthesizes a scammer with ElevenLabs and streams that audio into
-the running server exactly as a microphone would — a complete call with no human. It
+the running server exactly as a microphone would, a complete call with no human. It
 exercises Deepgram, turn-taking, extraction, the persona, TTS and Elasticsearch in one
 command, and doubles as a demo fallback.
 
