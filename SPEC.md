@@ -328,28 +328,34 @@ Four, each a `systemPrompt` composed of character text plus a shared **doctrine*
 
 ### Doctrine (the load-bearing part)
 
-- **Dangling carrot**, always about to comply, never refusing. Obstacles rotate
-  between categories; never two of a kind consecutively.
-- **Hard 25-word ceiling, target 10–15.** Counterintuitive but central: you do not
-  waste a scammer's time by talking at them, a monologue lets them mute you and work
-  another victim. Short turns force *them* to keep responding. Ten exchanges beat one
-  speech. This single constraint cut average reply length ~45%.
-- **Hand the ball back**, but not every turn and not the same way. Dead air is a
-  hang-up cue, yet a question every single time is a template, and a template is what
-  makes a voice sound generated however good the synthesis is.
-- **Vary the shape.** Real speech is uneven: four words, then thirty, then a fragment.
-  A constant reply length is a tell on its own.
-- **Never reuse an opener.** Repeating the same interjection turn after turn is the
-  most machine-like behavior available, so recent openings are fed back into the prompt
-  as phrases to avoid.
-- **A filler is not spoken every turn.** It fires on roughly a third of turns, and when
-  it does the model is told what was already said, so the reply continues from it
-  rather than stacking a second interjection in front.
-- **Harvest as confusion.** Asking a caller to repeat and spell payment details is
-  in-character for a confused target and is the primary intel mechanism. Reading a
-  long number back *wrong* is the highest-yield time-waster available.
-- **Plain spoken text only**, output is read aloud; no markdown, emoji, or stage
-  directions.
+An earlier version of this doctrine ran to roughly 1600 words and 56 directive lines
+per persona: banned phrases, length targets, ratios for how often to stall, ordered
+lists of moves. Every line was reasonable alone. Together they produced output that
+sounded like a model working through a checklist, which is the one quality the whole
+system cannot afford.
+
+It is now about 500 words, and most of that is the person rather than the rules.
+
+- **Characters are written as lives, not as feature lists.** Harold's cat, his glasses
+  and his late wife are context he lives in, not devices he deploys. Nothing tells him
+  when to mention them.
+- **Behaviour emerges from the character.** Lonely, unhurried, wary of officialdom,
+  hard of hearing: that produces a long call without a single instruction about
+  duration.
+- **Variety is directed, not quotaed.** The prompt asks the persona to notice how it
+  finished its last turn and finish this one differently, rather than prescribing a
+  distribution. `recentOpeners` supplies the same signal for openings.
+- **Range is explicit.** Personas are told they may be briefly sharp, because
+  uninterrupted confusion reads as performance.
+
+Only four constraints are stated as hard rules, because each has a failure mode that
+character alone will not prevent: never claim or deny being software, never disclose
+real payment data, never antagonise the caller, and emit plain spoken text only, since
+the output is read aloud and markdown or stage directions would be voiced.
+
+Measured over six consecutive turns after the rewrite, replies ranged from 10 to 24
+words, openings did not repeat, and the persona answered direct questions, asked its
+own, and once disputed the caller's premise outright.
 
 Mid-call persona swap is supported and framed in-narrative as handing the phone to
 someone else in the household.
