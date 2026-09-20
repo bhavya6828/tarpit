@@ -437,6 +437,16 @@ the server accepts it through `X-Tarpit-Token`, a bearer header, or the WebSocke
 `token` query parameter. The browser uses `NEXT_PUBLIC_TARPIT_TOKEN`. This is a
 small demo access boundary, not production user authentication.
 
+The browser automatically reconnects a dropped command socket with bounded
+exponential backoff from 500 ms to 8 seconds. A successful connection resets the
+backoff. Reconnection stops when the page unmounts. Repeated bridge errors are
+deduplicated, malformed JSON events and undersized audio frames are ignored without
+crashing the UI, and secure pages use HTTPS and WSS endpoints automatically.
+
+Health, campaign summary, and case-file requests are abortable. A component that
+unmounts or starts a replacement poll aborts its stale request so late responses do
+not update inactive UI.
+
 The process allows four concurrent sessions by default. Each session ends after
 30 minutes by default. External provider HTTP calls and WebSocket handshakes time
 out after five seconds by default.
@@ -523,6 +533,8 @@ record stays clean.
 | Ambience fetch fails | silently skipped; never breaks a call |
 | Twilio bad signature | 403, call rejected |
 | Browser never reports playback | server-side timeout releases `agentSpeaking` |
+| Browser command socket drops | UI reconnects with bounded backoff and preserves the current view |
+| Malformed command frame | frame is ignored and an actionable bridge error is retained once |
 
 ---
 

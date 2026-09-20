@@ -97,3 +97,22 @@ test('referral package is exposed as an accessible dialog', () => {
   assert.match(source, /aria-modal="true"/);
   assert.match(source, /aria-labelledby="case-file-title"/);
 });
+
+test('frontend integrates reconnect and safe frame helpers', () => {
+  const source = readWebFile('lib/useTarpit.ts');
+
+  assert.match(source, /reconnectDelay/);
+  assert.match(source, /parseSocketMessage/);
+  assert.match(source, /appendUniqueError/);
+  assert.doesNotMatch(source, /JSON\.parse\(ev\.data/);
+});
+
+test('frontend HTTP effects abort stale requests', () => {
+  const hook = readWebFile('lib/useTarpit.ts');
+  const intel = readWebFile('components/IntelPanel.tsx');
+  const report = readWebFile('components/CaseFile.tsx');
+
+  assert.match(hook, /AbortController/);
+  assert.match(intel, /AbortController/);
+  assert.match(report, /AbortController/);
+});
