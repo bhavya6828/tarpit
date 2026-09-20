@@ -25,6 +25,8 @@ GPT-4o streams replies to ElevenLabs text-to-speech while the extractor validate
 Install dependencies with `npm run install:all`, then create `.env` with `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, and `OPENAI_API_KEY`.
 Run `npm run dev`, open `http://localhost:3000`, choose a persona, click **ARM TARPIT**, and talk or use type-to-talk.
 
+On PowerShell, use `npm.cmd run install:all`, `Copy-Item .env.example .env`, and `npm.cmd run dev` if script policy blocks `npm.ps1`.
+
 For a microphone-free test, keep the app running and run `npm run simulate` in another terminal.
 Elastic keys are optional because the app falls back to local JSONL storage.
 
