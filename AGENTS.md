@@ -28,3 +28,4 @@ Never change behavior to match code that drifted.
 - Keep core logic clean and push implementation details to the edges.
 - Keep indentation, naming, and patterns consistent across the codebase.
 - No em-dashes in prose.
+- No comments on anything.
