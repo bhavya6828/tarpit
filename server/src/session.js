@@ -22,6 +22,16 @@ const IDLE_NUDGE_MS = 9000;      // scammer silent this long → agent fills the
 const ENRICH_EVERY_TURNS = 3;    // LLM intel enrichment cadence
 const SPEAK_GRACE_MS = 700;      // ignore barge-in right after agent starts talking
 
+const DEFAULT_DEPENDENCIES = {
+  store,
+  openaiAvailable: Boolean(openai),
+  createDeepgram: (options) => new DeepgramStream(options).connect(),
+  createTTS: (options) => new ElevenLabsStream(options),
+  streamReply: streamPersonaReply,
+  enrich: (model, transcript) => enrichIntel(openai, model, transcript),
+  pick,
+};
+
 /**
  * One engagement. Owns the full loop:
  *
@@ -30,8 +40,9 @@ const SPEAK_GRACE_MS = 700;      // ignore barge-in right after agent starts tal
  *                    └──► intel extraction ──► Elastic          PCM ────┘──► browser
  */
 export class Session extends EventEmitter {
-  constructor({ personaId = DEFAULT_PERSONA, transport = 'browser', caller = null } = {}) {
+  constructor({ personaId = DEFAULT_PERSONA, transport = 'browser', caller = null, dependencies = {} } = {}) {
     super();
+    this.dependencies = { ...DEFAULT_DEPENDENCIES, ...dependencies };
     this.id = randomUUID().slice(0, 8);
     this.persona = getPersona(personaId);
     this.transport = transport;
@@ -80,22 +91,22 @@ export class Session extends EventEmitter {
     });
     if (this.caller) this.#harvestCaller();
 
-    this.dg = new DeepgramStream({
+    this.dg = this.dependencies.createDeepgram({
       transport: this.transport,
       onOpen: () => this.emit('event', { type: 'stt_ready' }),
       onTranscript: (t) => this.#onTranscript(t),
       onUtteranceEnd: () => this.#flushTurn('utterance_end'),
       onSpeechStarted: () => this.#onSpeechStarted(),
       onError: (e) => this.emit('event', { type: 'error', scope: 'deepgram', message: e.message }),
-    }).connect();
+    });
 
     this.metricsTimer = setInterval(() => this.emit('event', { type: 'metrics', ...this.metrics() }), 500);
     this.#armIdleTimer();
 
-    await store.upsertSession(this.#sessionDoc());
+    await this.dependencies.store.upsertSession(this.#sessionDoc());
 
     // A real person says hello the moment they pick up.
-    const opener = pick(this.persona.openers);
+    const opener = this.dependencies.pick(this.persona.openers);
     this.#speak(opener, { isOpener: true });
   }
 
@@ -111,10 +122,12 @@ export class Session extends EventEmitter {
     this.dg = null;
 
     const m = this.metrics();
-    if (openai && this.transcript.length > 1) {
-      this.enrichment = (await enrichIntel(openai, config.openai.extractModel, this.#plainTranscript())) || this.enrichment;
+    if (this.dependencies.openaiAvailable && this.transcript.length > 1) {
+      try {
+        this.enrichment = (await this.dependencies.enrich(config.openai.extractModel, this.#plainTranscript())) || this.enrichment;
+      } catch {}
     }
-    await store.upsertSession(this.#sessionDoc());
+    await this.dependencies.store.upsertSession(this.#sessionDoc());
     this.emit('event', { type: 'session_end', reason, ...m, enrichment: this.enrichment });
     return m;
   }
@@ -187,7 +200,7 @@ export class Session extends EventEmitter {
     };
     this.transcript.push(entry);
     this.emit('event', { type: 'transcript', speaker: 'scammer', text: clean, final: true, injected: true });
-    store.indexUtterance(entry);
+    this.dependencies.store.indexUtterance(entry);
     this.#harvest(clean, 'scammer');
 
     if (this.agentSpeaking) {
@@ -227,7 +240,7 @@ export class Session extends EventEmitter {
     };
     this.transcript.push(entry);
     this.emit('event', { type: 'transcript', speaker: 'scammer', text, final: true });
-    store.indexUtterance(entry);
+    this.dependencies.store.indexUtterance(entry);
 
     this.#harvest(text, 'scammer');
 
@@ -269,8 +282,8 @@ export class Session extends EventEmitter {
 
     let spoken = '';
     try {
-      const filler = pick(this.persona.fillers);
-      const stream = streamPersonaReply({
+      const filler = this.dependencies.pick(this.persona.fillers);
+      const stream = this.dependencies.streamReply({
         persona: this.persona,
         history: this.history,
         tactics: signals,
@@ -297,7 +310,7 @@ export class Session extends EventEmitter {
     this.#armIdleTimer();
 
     if (this.turnCount % ENRICH_EVERY_TURNS === 0) this.#enrich();
-    store.upsertSession(this.#sessionDoc());
+    this.dependencies.store.upsertSession(this.#sessionDoc());
 
     // Anything the scammer said while we were replying gets handled now.
     if (this.pendingUtterance.trim()) this.#flushTurn('queued');
@@ -319,7 +332,7 @@ export class Session extends EventEmitter {
     this.emit('event', { type: 'state', agentSpeaking: true });
 
     let full = '';
-    const tts = new ElevenLabsStream({
+    const tts = this.dependencies.createTTS({
       transport: this.transport,
       voiceId: this.persona.voiceId,
       voiceSettings: this.persona.voiceSettings,
@@ -385,7 +398,7 @@ export class Session extends EventEmitter {
         turnId,
         isOpener,
       });
-      store.indexUtterance(entry);
+      this.dependencies.store.indexUtterance(entry);
     }
 
     // Safety net in case the browser never reports playback completion.
@@ -465,7 +478,7 @@ export class Session extends EventEmitter {
     if (!items.length) return;
     this.intel.push(...items);
     for (const item of items) this.emit('event', { type: 'intel', item });
-    store.indexIntel(items);
+    this.dependencies.store.indexIntel(items);
   }
 
   #harvest(text, speaker) {
@@ -473,16 +486,18 @@ export class Session extends EventEmitter {
     if (!found.length) return;
     this.intel.push(...found);
     for (const item of found) this.emit('event', { type: 'intel', item });
-    store.indexIntel(found);
+    this.dependencies.store.indexIntel(found);
   }
 
   async #enrich() {
-    if (!openai) return;
-    const result = await enrichIntel(openai, config.openai.extractModel, this.#plainTranscript());
-    if (result) {
-      this.enrichment = result;
-      this.emit('event', { type: 'enrichment', enrichment: result });
-    }
+    if (!this.dependencies.openaiAvailable) return;
+    try {
+      const result = await this.dependencies.enrich(config.openai.extractModel, this.#plainTranscript());
+      if (result) {
+        this.enrichment = result;
+        this.emit('event', { type: 'enrichment', enrichment: result });
+      }
+    } catch {}
   }
 
   #plainTranscript() {
@@ -506,7 +521,7 @@ export class Session extends EventEmitter {
   async #nudge() {
     this.turnInFlight = true;
     try {
-      const stream = streamPersonaReply({
+      const stream = this.dependencies.streamReply({
         persona: this.persona,
         history: this.history,
         tactics: ['long_silence'],

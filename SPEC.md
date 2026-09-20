@@ -471,6 +471,7 @@ record stays clean.
 | Missing voice keys | surfaced in `/api/health` and the UI banner; rest still runs |
 | Mic blocked | error surfaced; type-to-talk remains available |
 | LLM aborted by barge-in | suppressed, not shown as an error |
+| Intel enrichment fails | call continues and session teardown still persists its final state |
 | Ambience fetch fails | silently skipped; never breaks a call |
 | Twilio bad signature | 403, call rejected |
 | Browser never reports playback | server-side timeout releases `agentSpeaking` |
