@@ -1,0 +1,14 @@
+{
+  "name": "tarpit-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "@elastic/elasticsearch": "^8.15.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "openai": "^4.77.0",
+    "ws": "^8.18.0"
+  }
+}
