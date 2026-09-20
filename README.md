@@ -1,8 +1,8 @@
-# TARPIT
+# Harold
 
 ## Product
 
-Tarpit is an autonomous AI bodyguard for scam calls.
+Harold is an autonomous AI bodyguard for scam calls.
 It answers the phone so real people do not have to.
 
 ## Problem
