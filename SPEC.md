@@ -460,6 +460,33 @@ emotion is specified rather than hoped for, and personas emit them inline.
 Tags are stripped before a line is written to the transcript or indexed, so the intel
 record stays clean.
 
+### 12.2 Two synthesis paths
+
+`eleven_v3` is not available on the input-streaming websocket. The endpoint rejects
+it outright:
+
+```
+400 unsupported_model
+Model 'eleven_v3' is not supported on the text-to-speech websocket endpoint.
+```
+
+So the voice has two paths, selected from the configured model:
+
+| Path | Models | Mechanism |
+|---|---|---|
+| Websocket | `flash`, `turbo`, `multilingual` | Text pushed into an open socket, audio returns as it generates. |
+| HTTP | `eleven_v3` | Complete text posted once, audio streams back in the response body. |
+
+The HTTP path cannot begin until the reply is complete, which suits reply granularity
+since the whole utterance is buffered anyway. It costs one extra round trip per turn.
+
+**Filler prewarm.** On the HTTP path the filler is synthesized and cached to disk per
+persona and phrase on first use. Fillers are a fixed set of short fixed strings, so
+after the first call they play immediately with no request at all, which is what keeps
+the instant-response feel while the model is still writing the rest of the reply.
+Cached audio is keyed by voice, model and phrase, so changing any of those regenerates
+it.
+
 ---
 
 ## 13. Failure modes
