@@ -246,6 +246,22 @@ generation, so they cannot interrupt the persona's own reply or suppress barge-i
 Trimmed to `MAX_HISTORY_TURNS = 24`, always preserving the opening exchange so
 narrative continuity survives a long call.
 
+### 5.5.1 Person first
+
+The doctrine optimized for time-wasting produced a persona that stalled on every
+single turn: sit down, find the glasses, move the cat, ask for a repeat. That is not
+how a slow person behaves, it is how a delay machine behaves, and a caller hangs up on
+a delay machine.
+
+The stalling only works because the target seems real. So most turns are ordinary human
+responses, obstacles are occasional, and the agent is told when it has leaned on them
+too long. Consecutive stalls are counted against the persona's own obstacle vocabulary,
+and after two in a row the next turn is directed to simply respond: answer the question,
+react, ask something a normal person would ask.
+
+Being briefly lucid, direct, or even mildly impatient is in character. Nobody is
+confused every second of a phone call, and unbroken confusion reads as a performance.
+
 ### 5.6 Call state
 
 Raw turns are a poor memory. A model given only a transcript improvises a plausible
