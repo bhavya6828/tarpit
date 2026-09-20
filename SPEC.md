@@ -477,8 +477,28 @@ So the voice has two paths, selected from the configured model:
 | Websocket | `flash`, `turbo`, `multilingual` | Text pushed into an open socket, audio returns as it generates. |
 | HTTP | `eleven_v3` | Complete text posted once, audio streams back in the response body. |
 
-The HTTP path cannot begin until the reply is complete, which suits reply granularity
-since the whole utterance is buffered anyway. It costs one extra round trip per turn.
+The HTTP path cannot begin until text is complete, so it synthesizes **per sentence**
+rather than per reply. Two reasons, both measured:
+
+| Text sent | `eleven_v3` first byte | `eleven_turbo_v2_5` first byte |
+|---|---|---|
+| Whole reply | 1505 ms | 283 ms |
+| First sentence only | 806 ms | 246 ms |
+
+v3's first byte scales with the length of the text it is given, so a shorter request
+is faster on its own, and it can start as soon as the first sentence exists instead of
+waiting for the whole reply. Together that roughly halves time to audio:
+
+| Path | Caller stops to persona audible |
+|---|---|
+| v3, whole reply | ~3.0 s |
+| v3, per sentence | **~1.5 s** |
+| turbo, websocket stream | ~1.2 s |
+
+Requests are issued as each sentence completes and may be in flight together, but
+audio is emitted strictly in sentence order. The head sentence streams straight
+through; later ones buffer until their turn, which is cheap because a sentence is
+small. Out-of-order emission would rearrange the persona's words.
 
 **Filler prewarm.** On the HTTP path the filler is synthesized and cached to disk per
 persona and phrase on first use. Fillers are a fixed set of short fixed strings, so
