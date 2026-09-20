@@ -559,6 +559,13 @@ laptop speakers. Interim transcripts plus a grace window are the reliable signal
 trailing separator onto the following word (`021000021or`), breaking the `\b` anchor
 and silently dropping every routing number.
 
+**Streamed audio must stay on sample boundaries.** An HTTP response arrives in
+arbitrary byte lengths, so a chunk can end halfway through a 16-bit sample. Forwarding
+that shifts every following sample one byte, which does not sound like a glitch, it
+sounds like white noise, and the browser throws constructing an `Int16Array` from an
+odd byte count. The partial sample is carried into the next chunk. The websocket path
+never hit this because it delivered whole frames.
+
 **Reply length is a time-wasting lever, inverted.** Longer replies waste less of the
 scammer's time, not more.
 

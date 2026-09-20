@@ -47,6 +47,31 @@ export function takeSentences(buffer) {
   return { sentences, rest: input.slice(start) };
 }
 
+const EMPTY = Buffer.alloc(0);
+
+/** Width of one audio sample for an ElevenLabs output format. */
+export function bytesPerSample(outputFormat) {
+  return String(outputFormat).startsWith('ulaw') ? 1 : 2;
+}
+
+/**
+ * Keep streamed audio on sample boundaries.
+ *
+ * HTTP responses arrive in arbitrary byte lengths, so a chunk can end halfway
+ * through a 16-bit sample. Forwarding that shifts every following sample one
+ * byte out, which does not sound like a glitch, it sounds like white noise.
+ * The trailing partial sample is carried into the next chunk instead.
+ */
+export function alignSamples(chunk, carry = EMPTY, width = 2) {
+  const buf = carry.length ? Buffer.concat([carry, chunk]) : chunk;
+  if (width < 2) return { emit: buf, carry: EMPTY };
+
+  const remainder = buf.length % width;
+  if (!remainder) return { emit: buf, carry: EMPTY };
+
+  return { emit: buf.subarray(0, buf.length - remainder), carry: Buffer.from(buf.subarray(buf.length - remainder)) };
+}
+
 const FILLER_DIR = path.resolve(process.cwd(), 'data', 'fillers');
 
 /** Identity of one cached filler clip. Voice, model and codec all change the audio. */
@@ -233,10 +258,16 @@ export class ElevenLabsBatch {
     const job = (async () => {
       try {
         const res = await this.#open(text);
+        const width = bytesPerSample(this.outputFormat);
+        let carry = EMPTY;
         for await (const chunk of res.body) {
           if (this.cancelled) return;
-          slot.chunks.push(Buffer.from(chunk));
-          this.#drain();
+          const { emit, carry: rest } = alignSamples(Buffer.from(chunk), carry, width);
+          carry = rest;
+          if (emit.length) {
+            slot.chunks.push(emit);
+            this.#drain();
+          }
         }
       } catch (err) {
         if (!this.cancelled && err?.name !== 'AbortError') this.onError(err);
@@ -279,7 +310,8 @@ export class ElevenLabsBatch {
     try {
       const pcm = await this.#request(text);
       if (this.cancelled) return;
-      this.onAudio(pcm, null);
+      const { emit } = alignSamples(pcm, EMPTY, bytesPerSample(this.outputFormat));
+      this.onAudio(emit, null);
       try {
         fs.mkdirSync(FILLER_DIR, { recursive: true });
         fs.writeFileSync(file, pcm);

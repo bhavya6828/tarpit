@@ -286,7 +286,13 @@ export class AudioEngine {
       this.nextStart = Math.max(ctx.currentTime + SCHEDULE_LEAD, this.nextStart);
     }
 
-    const i16 = new Int16Array(pcm);
+    // Defence in depth. The server keeps chunks on sample boundaries, but an odd
+    // byte count here throws inside Int16Array and kills playback, so trim
+    // rather than trust. A byte-shifted buffer decodes as white noise, which is
+    // worse than dropping one sample.
+    const usable = pcm.byteLength - (pcm.byteLength % 2);
+    if (usable <= 0) return;
+    const i16 = new Int16Array(usable === pcm.byteLength ? pcm : pcm.slice(0, usable));
     if (!i16.length) return;
 
     const buffer = ctx.createBuffer(1, i16.length, PLAYBACK_RATE);
