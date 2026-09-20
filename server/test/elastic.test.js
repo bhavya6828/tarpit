@@ -1,7 +1,6 @@
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import os from 'node:os';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Store } from '../src/elastic.js';
 
@@ -12,7 +11,9 @@ afterEach(async () => {
 });
 
 async function tempStore(options = {}) {
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'tarpit-store-'));
+  const baseDir = path.join(process.cwd(), 'data');
+  await mkdir(baseDir, { recursive: true });
+  const dataDir = await mkdtemp(path.join(baseDir, 'test-store-'));
   tempDirs.push(dataDir);
   return { dataDir, store: new Store({ dataDir, elastic: {}, ...options }) };
 }

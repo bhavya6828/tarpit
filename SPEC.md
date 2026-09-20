@@ -335,6 +335,12 @@ Three Elasticsearch indices, created on boot if absent.
 Every write also lands in memory and appends to `data/*.jsonl`. Elastic is never on
 the critical path of a call.
 
+The local store reloads all valid JSONL records on process start, so reports remain
+available when Elasticsearch is absent or fails. Payment cards, routing numbers,
+and bank account numbers are masked before any memory, JSONL, or Elasticsearch
+write. Local records have no automatic expiry and remain until the operator deletes
+the files under `data/`.
+
 ---
 
 ## 9. Caller forensics
