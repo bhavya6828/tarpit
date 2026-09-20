@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioEngine } from './audio';
 import type { ConnState, Enrichment, IntelItem, Metrics, PersonaCard, TranscriptLine } from './types';
+import { bridgeOfflineMessage, emptySessionView } from './sessionView';
 
 const SERVER = process.env.NEXT_PUBLIC_TARPIT_SERVER || 'localhost:8787';
 const ACCESS_TOKEN = process.env.NEXT_PUBLIC_TARPIT_TOKEN || '';
@@ -91,10 +92,11 @@ export function useTarpit() {
 
     ws.onopen = () => setConn('ready');
     ws.onclose = () => {
+      engineRef.current?.flush();
       setConn('offline');
       setAgentSpeaking(false);
     };
-    ws.onerror = () => setErrors((e) => [...e.slice(-4), 'audio bridge unreachable — is the server running?']);
+    ws.onerror = () => setErrors((e) => [...e.slice(-4), bridgeOfflineMessage]);
 
     ws.onmessage = (ev) => {
       // Binary frame = [uint32 turnId][PCM16 @24kHz]
@@ -110,15 +112,22 @@ export function useTarpit() {
         case 'hello':
           setPersonas(evt.personas);
           break;
-        case 'session_start':
+        case 'session_start': {
+          const fresh = emptySessionView();
+          engineRef.current?.flush();
           setConn('live');
           setActivePersona(evt.persona);
           engineRef.current?.setAmbience(evt.persona?.id ?? null);
-          setTranscript([]);
-          setIntel([]);
-          setEnrichment(null);
-          setSignals([]);
+          setTranscript(fresh.transcript);
+          setPartial(fresh.partial);
+          setAgentLive(fresh.agentLive);
+          setIntel(fresh.intel);
+          setMetrics(fresh.metrics);
+          setEnrichment(fresh.enrichment);
+          setSignals(fresh.signals);
+          setAgentSpeaking(fresh.agentSpeaking);
           break;
+        }
         case 'session_end':
           setConn('ended');
           setAgentSpeaking(false);

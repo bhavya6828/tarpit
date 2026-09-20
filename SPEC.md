@@ -405,6 +405,10 @@ Server → client, JSON events plus binary audio framed as
 
 `inject` feeds text as though the caller had spoken it, same pipeline, no microphone.
 It is the UI's type-to-talk box and the demo's mic-failure fallback.
+Typed input is trimmed and blank input is ignored. A new session flushes queued
+audio and clears the transcript, partial text, live persona text, intel, metrics,
+enrichment, signals, and speaking state. A bridge disconnect also flushes playback
+and leaves an actionable offline message.
 
 The command WebSocket and report dispatch route use local-only access when
 `TARPIT_ACCESS_TOKEN` is blank. Remote clients are rejected. When a token is set,

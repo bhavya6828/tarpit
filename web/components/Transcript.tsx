@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Panel, Pill } from './ui';
 import type { PersonaCard, TranscriptLine } from '@/lib/types';
+import { normalizeInjectedText } from '@/lib/sessionView';
 
 export default function Transcript({
   lines,
@@ -29,8 +30,8 @@ export default function Transcript({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const text = draft.trim();
-    if (!text || !live) return;
+    const text = normalizeInjectedText(draft, live);
+    if (!text) return;
     onInject(text);
     setDraft('');
   };
