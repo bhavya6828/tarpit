@@ -4,6 +4,19 @@ import { TACTICS } from './personas.js';
 
 export const openai = config.openai.key ? new OpenAI({ apiKey: config.openai.key }) : null;
 
+const AUDIO_TAG_DIRECTION = `
+VOICE DIRECTION: your line is spoken by an engine that acts on emotional cues
+written in square brackets. Without them you are read accurately and flatly,
+which sounds like a machine.
+
+Open your reply with ONE bracketed cue, and use at most one more inside it.
+Choose what the moment actually calls for: [confused], [nervously], [frightened],
+[hopeful], [sighs], [chuckles], [slowly], [whispering], [cheerfully].
+
+Cues are direction, never dialogue. Never describe an action, only an emotion.
+Write "[nervously] Oh my heavens, five thousand?" and never "[picks up wallet]".
+`.trim();
+
 const MAX_HISTORY_TURNS = 24;
 
 /** Trim history but always keep the opening exchange for narrative continuity. */
@@ -30,6 +43,12 @@ export async function* streamPersonaReply({ persona, history, tactics = [], elap
   }
 
   const messages = [{ role: 'system', content: persona.systemPrompt }];
+
+  // eleven_v3 is the only model that acts on emotional direction. Asking the
+  // other models for tags just makes them speak the brackets aloud.
+  if (/v3/.test(config.elevenlabs.model)) {
+    messages.push({ role: 'system', content: AUDIO_TAG_DIRECTION });
+  }
 
   // Long-call awareness: the longer they've stayed, the more invested they are,
   // and the harder the agent should work to protect the streak.
@@ -130,6 +149,50 @@ function findClauseEnd(buf) {
     if ((c === ',' || c === ';' || c === ':' || c === '\u2014') && i >= 28) return i;
   }
   return -1;
+}
+
+/**
+ * Emotional direction for eleven_v3, for example "[confused] Oh my heavens."
+ *
+ * A model asked to sound frightened without being told to reads the words
+ * accurately and flatly, because nothing in the text says otherwise. Tags state
+ * the emotion instead of hoping the model infers it. They belong in the audio
+ * and nowhere else, so they are stripped before a line reaches a transcript or
+ * an intel record.
+ *
+ * Only short lowercase directions in leading position count, so bracketed data
+ * the caller states, such as an account number, survives.
+ */
+const AUDIO_TAG = /\[[a-z][a-z ,'-]{1,28}\]\s*/g;
+
+export function stripAudioTags(text) {
+  return String(text ?? '').replace(AUDIO_TAG, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+/**
+ * Split generated text into the spans handed to the voice engine.
+ *
+ * `reply` keeps the whole reply together, which produces the best prosody
+ * because the engine can plan intonation across the entire utterance. `clause`
+ * trades some of that back for lower latency.
+ */
+export function chunkForSpeech(text, granularity = 'reply') {
+  const input = String(text ?? '');
+  if (granularity !== 'clause') return input.trim() ? [input] : [];
+
+  const out = [];
+  let buf = '';
+  for (const ch of input) {
+    buf += ch;
+    let cut;
+    while ((cut = findClauseEnd(buf)) !== -1) {
+      const piece = buf.slice(0, cut + 1);
+      buf = buf.slice(cut + 1);
+      if (piece.trim()) out.push(piece);
+    }
+  }
+  if (buf.trim()) out.push(buf);
+  return out;
 }
 
 /** Strip anything that shouldn't be spoken aloud. */

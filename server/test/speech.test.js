@@ -36,9 +36,16 @@ test('chunkForSpeech never splits abbreviations or decimals', () => {
 });
 
 test('chunkForSpeech never emits a word fragment', () => {
-  // The bug this exists to prevent: ~12-char flushes mid-phrase.
-  const out = chunkForSpeech('Oh my heavens, five thousand dollars? Hold on now.', 'clause');
+  // The bug this guards: ~12-char flushes mid-phrase, which made the voice
+  // read word by word. Length is the wrong invariant, since "Hold on now." is
+  // a legitimate short clause. What matters is that every span except the last
+  // ends on a clause boundary rather than in the middle of a phrase.
+  const out = chunkForSpeech(
+    'Oh my heavens, five thousand dollars? Hold on now, son, let me sit down. Can you repeat that?',
+    'clause'
+  );
+  assert.ok(out.length > 1, 'expected several clauses');
   for (const c of out) {
-    assert.ok(c.trim().length > 12, `fragment emitted: "${c}"`);
+    assert.match(c.trim(), /[.!?,;:]$/, `span does not end on a clause boundary: "${c}"`);
   }
 });

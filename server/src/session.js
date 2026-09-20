@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { DeepgramStream } from './deepgram.js';
 import { ElevenLabsStream } from './elevenlabs.js';
-import { openai, streamPersonaReply, pick } from './brain.js';
+import { openai, streamPersonaReply, pick, stripAudioTags, chunkForSpeech } from './brain.js';
 import { getPersona, DEFAULT_PERSONA } from './personas.js';
 import { extractIntel, detectSignals, enrichIntel } from './intel.js';
 import { store } from './elastic.js';
@@ -332,25 +332,42 @@ export class Session extends EventEmitter {
     this.tts = tts;
     tts.connect();
 
-    const say = (chunk) => {
+    // The UI streams tokens as they arrive; the voice engine does not. Those are
+    // separate concerns: live text keeps the operator informed, while the engine
+    // wants as much of the utterance as it can get before it starts planning
+    // intonation.
+    const show = (chunk) => {
       if (turnId !== this.turnId) return;
       full += chunk;
-      tts.push(chunk);
-      this.emit('event', { type: 'agent_delta', turnId, text: chunk });
+      this.emit('event', { type: 'agent_delta', turnId, text: stripAudioTags(chunk) || chunk.replace(/\[[^\]]*\]/g, '') });
     };
 
-    if (text) say(`${text} `);
+    // The filler is spoken immediately either way. It is what buys the time the
+    // rest of the reply takes to arrive.
+    if (text) {
+      show(`${text} `);
+      tts.push(`${text} `);
+    }
 
     if (prefixOf) {
+      let pending = '';
       for await (const delta of prefixOf) {
         if (turnId !== this.turnId) break; // interrupted
-        say(delta.replace(/[*_`#]/g, ''));
+        const clean = delta.replace(/[*_`#]/g, '');
+        show(clean);
+        if (config.elevenlabs.granularity === 'clause') tts.push(clean);
+        else pending += clean;
+      }
+      for (const span of chunkForSpeech(pending, config.elevenlabs.granularity)) {
+        if (turnId !== this.turnId) break;
+        tts.push(span);
       }
     }
 
     tts.end();
 
-    const finalText = full.trim();
+    // Emotional direction belongs in the audio, not in the record.
+    const finalText = stripAudioTags(full);
     if (finalText) {
       const entry = {
         session_id: this.id,
