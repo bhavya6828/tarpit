@@ -12,7 +12,8 @@
     "build": "npm --prefix web run build",
     "start": "concurrently -n SERVER,WEB -c magenta,cyan \"node --env-file=.env server/index.js\" \"npm --prefix web run start\"",
     "simulate": "node --env-file=.env scripts/simulate-call.mjs",
-    "ambience": "node --env-file=.env scripts/generate-ambience.mjs"
+    "ambience": "node --env-file=.env scripts/generate-ambience.mjs",
+    "voicelab": "node --env-file=.env scripts/voice-lab.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

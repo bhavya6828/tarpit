@@ -68,14 +68,68 @@ export async function* streamPersonaReply({ persona, history, tactics = [], elap
     const delta = part.choices?.[0]?.delta?.content;
     if (!delta) continue;
     buf += delta;
-    // Flush on word boundaries so TTS never receives a split word.
-    const lastSpace = buf.lastIndexOf(' ');
-    if (lastSpace > 0 && buf.length >= 12) {
-      yield buf.slice(0, lastSpace + 1);
-      buf = buf.slice(lastSpace + 1);
+
+    // Flush on CLAUSE boundaries, never on word boundaries.
+    //
+    // This is the difference between speech and dictation. A TTS engine plans
+    // intonation across the span of text it is handed: give it "Oh my heavens,"
+    // and it produces one falling phrase; give it "Oh my " then "heavens, " and
+    // it produces two unrelated fragments with their own stress patterns, which
+    // is exactly what reads as a machine reading a list.
+    //
+    // Latency is covered by the filler already playing, so waiting for a whole
+    // clause costs nothing the caller can hear.
+    let cut;
+    while ((cut = findClauseEnd(buf)) !== -1) {
+      const piece = buf.slice(0, cut + 1);
+      buf = buf.slice(cut + 1);
+      if (piece.trim()) yield piece;
+    }
+
+    // Runaway guard: a clause this long without punctuation would stall audio.
+    if (buf.length > 160) {
+      const lastSpace = buf.lastIndexOf(' ');
+      if (lastSpace > 40) {
+        yield buf.slice(0, lastSpace + 1);
+        buf = buf.slice(lastSpace + 1);
+      }
     }
   }
   if (buf.trim()) yield buf;
+}
+
+/**
+ * Index of the next clause-ending character, or -1.
+ *
+ * Sentence enders always cut. Commas cut only once enough text has accumulated
+ * to be worth speaking as a unit — otherwise "Oh, " ships on its own and we are
+ * back to fragments.
+ */
+const ABBREVIATIONS = /(?:^|\s)(mr|mrs|ms|dr|st|jr|sr|prof|rev|lt|sgt|capt|dept|apt|no|vs|etc|inc|ltd|co|u\.s|a\.m|p\.m)$/i;
+
+function findClauseEnd(buf) {
+  for (let i = 0; i < buf.length; i++) {
+    const c = buf[i];
+
+    if (c === '.' || c === '!' || c === '?') {
+      const next = buf[i + 1];
+      // Text arrives a character at a time, so a terminator at the end of the
+      // buffer has no lookahead yet. Wait for the next character rather than
+      // guessing — otherwise "5.000" splits before the "0" ever shows up.
+      if (next === undefined) continue;
+      // Real sentence ends are followed by space. "5.000" and "I.R.S" are not.
+      if (!/\s/.test(next)) continue;
+      // "Mr. Biscuits" — an abbreviation, not a sentence. Splitting here stops
+      // the voice dead on the title, which is worse than not splitting at all.
+      if (c === '.' && ABBREVIATIONS.test(buf.slice(0, i))) continue;
+      // A lone initial: "J. Miller".
+      if (c === '.' && /(?:^|[\s.])[A-Z]$/.test(buf.slice(0, i))) continue;
+      return i;
+    }
+
+    if ((c === ',' || c === ';' || c === ':' || c === '\u2014') && i >= 28) return i;
+  }
+  return -1;
 }
 
 /** Strip anything that shouldn't be spoken aloud. */
