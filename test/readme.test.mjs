@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+const readme = (await readFile(new URL("../README.md", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("README has the essential project sections", () => {
   for (const section of ["Product", "Problem", "Solution", "Pipeline", "Test locally"]) {
