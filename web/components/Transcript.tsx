@@ -24,12 +24,12 @@ export default function Transcript({
   const [draft, setDraft] = useState('');
 
   useEffect(() => {
-    const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    const element = scroller.current;
+    if (element) element.scrollTop = element.scrollHeight;
   }, [lines.length, partial, agentLive]);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
     const text = normalizeInjectedText(draft, live);
     if (!text) return;
     onInject(text);
@@ -38,71 +38,78 @@ export default function Transcript({
 
   return (
     <Panel
-      title="Live engagement transcript"
-      right={<Pill tone={live ? 'phos' : 'dim'}>{live ? 'recording' : 'standby'}</Pill>}
-      className="min-h-0 flex-1"
+      title="Conversation"
+      right={<Pill tone={live ? 'phos' : 'dim'}>{live ? 'Live transcript' : 'Standing by'}</Pill>}
+      className="min-h-[620px] flex-1 lg:min-h-0"
       bodyClass="flex min-h-0 flex-col"
     >
-      <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div
+        ref={scroller}
+        className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6"
+        aria-live="polite"
+      >
         {lines.length === 0 && !partial && !agentLive && (
-          <div className="pt-16 text-center">
-            <p className="text-[13px] text-dimmer">no active engagement</p>
-            <p className="mt-2 text-[11px] text-dimmer">
-              arm a persona, then speak — or type below as the caller
+          <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center py-16 text-center">
+            <span className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-canvas font-serif text-xl text-text">
+              T
+            </span>
+            <h3 className="font-serif text-2xl tracking-[-0.03em] text-text">Ready when you are</h3>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              Start an engagement, speak through the microphone, or type a caller message below.
             </p>
           </div>
         )}
 
-        {lines.map((l) => (
-          <Line key={l.id} line={l} persona={persona} />
+        {lines.map((line) => (
+          <Line key={line.id} line={line} persona={persona} />
         ))}
 
         {partial && (
-          <Bubble speaker="scammer" name="CALLER" color="var(--color-crit)" faded>
+          <Bubble speaker="scammer" name="Caller" faded>
             {partial}
           </Bubble>
         )}
 
         {agentLive && (
-          <Bubble
-            speaker="persona"
-            name={(persona?.name || 'PERSONA').toUpperCase()}
-            color={persona?.color || 'var(--color-phos)'}
-          >
-            <span className="caret">{agentLive}</span>
+          <Bubble speaker="persona" name={persona?.name || 'Persona'}>
+            <span>{agentLive}</span>
           </Bubble>
         )}
       </div>
 
-      {/* Type-to-talk: dev convenience, and the demo's mic-failure escape hatch. */}
-      <form onSubmit={submit} className="flex gap-2 border-t border-edge px-3 py-2">
-        <span className="self-center text-[11px] text-dimmer">caller ▸</span>
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          disabled={!live}
-          placeholder={live ? 'type as the scammer and press enter…' : 'engagement not armed'}
-          className="flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-dimmer disabled:cursor-not-allowed"
-        />
-        <button
-          type="submit"
-          disabled={!live || !draft.trim()}
-          className="rounded-sm border border-edge px-2 py-0.5 text-[10px] tracking-wider text-dim uppercase transition-colors hover:border-phos/50 hover:text-phos disabled:opacity-30 disabled:hover:border-edge disabled:hover:text-dim"
-        >
-          send
-        </button>
+      <form onSubmit={submit} className="border-t border-border bg-canvas/70 p-3 sm:p-4">
+        <label htmlFor="caller-message" className="mb-2 block text-xs font-semibold text-text">
+          Type caller message
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="caller-message"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            disabled={!live}
+            placeholder={live ? 'Enter what the caller says' : 'Start an engagement to type'}
+            className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2.5 text-sm text-text transition-colors placeholder:text-faint hover:border-border-strong disabled:cursor-not-allowed disabled:bg-surface-subtle"
+          />
+          <button
+            type="submit"
+            disabled={!live || !draft.trim()}
+            className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            Send
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-muted">Use this when microphone access is unavailable.</p>
       </form>
     </Panel>
   );
 }
 
 function Line({ line, persona }: { line: TranscriptLine; persona: PersonaCard | null }) {
-  const isScammer = line.speaker === 'scammer';
+  const caller = line.speaker === 'scammer';
   return (
     <Bubble
       speaker={line.speaker}
-      name={isScammer ? 'CALLER' : (persona?.name || 'PERSONA').toUpperCase()}
-      color={isScammer ? 'var(--color-crit)' : persona?.color || 'var(--color-phos)'}
+      name={caller ? 'Caller' : persona?.name || 'Persona'}
       injected={line.injected}
     >
       {line.text}
@@ -113,35 +120,29 @@ function Line({ line, persona }: { line: TranscriptLine; persona: PersonaCard | 
 function Bubble({
   speaker,
   name,
-  color,
   children,
   faded,
   injected,
 }: {
   speaker: string;
   name: string;
-  color: string;
   children: React.ReactNode;
   faded?: boolean;
   injected?: boolean;
 }) {
-  const isScammer = speaker === 'scammer';
+  const caller = speaker === 'scammer';
+
   return (
-    <div className={`flex ${isScammer ? 'justify-start' : 'justify-end'}`}>
-      <div className={`max-w-[82%] ${faded ? 'opacity-55' : ''}`}>
-        <div
-          className={`mb-1 flex items-center gap-1.5 text-[10px] tracking-[0.16em] ${isScammer ? '' : 'justify-end'}`}
-          style={{ color }}
-        >
-          {name}
-          {injected && <span className="text-dimmer">· typed</span>}
+    <div className={`soft-land flex ${caller ? 'justify-start' : 'justify-end'}`}>
+      <div className={`max-w-[92%] sm:max-w-[78%] ${faded ? 'opacity-55' : ''}`}>
+        <div className={`mb-1.5 flex items-center gap-2 text-[11px] font-semibold ${caller ? '' : 'justify-end'}`}>
+          <span className={caller ? 'text-danger' : 'text-positive'}>{name}</span>
+          {injected && <span className="font-normal text-faint">Typed input</span>}
         </div>
         <div
-          className="rounded-sm border px-3 py-2 text-[13.5px] leading-relaxed"
-          style={{
-            borderColor: `${color}33`,
-            background: isScammer ? 'rgba(255,59,92,0.05)' : 'rgba(0,255,156,0.045)',
-          }}
+          className={`rounded-lg border px-4 py-3 text-[15px] leading-relaxed text-text ${
+            caller ? 'border-danger/15 bg-danger-soft' : 'border-positive/15 bg-positive-soft'
+          }`}
         >
           {children}
         </div>

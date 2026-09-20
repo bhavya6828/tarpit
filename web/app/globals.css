@@ -1,118 +1,142 @@
 @import "tailwindcss";
 
 @theme {
-  --color-void: #050708;
-  --color-panel: #0a0e10;
-  --color-panel-2: #0e1417;
-  --color-edge: #172124;
-  --color-edge-hot: #234047;
-  --color-ink: #cfe0dc;
-  --color-dim: #5e7470;
-  --color-dimmer: #3b4a48;
-  --color-phos: #00ff9c;
-  --color-phos-dim: #0a8f5c;
-  --color-amber: #ffb84d;
-  --color-crit: #ff3b5c;
-  --color-info: #6fa8ff;
-
-  --font-mono: var(--font-jet), ui-monospace, monospace;
-  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --color-canvas: #f7f6f2;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f0eee8;
+  --color-text: #20211f;
+  --color-muted: #6f706b;
+  --color-faint: #9b9b94;
+  --color-border: #dedbd3;
+  --color-border-strong: #c8c4ba;
+  --color-accent: #20211f;
+  --color-positive: #35624b;
+  --color-positive-soft: #edf3ec;
+  --color-warning: #8b641c;
+  --color-warning-soft: #fbf3db;
+  --color-danger: #9a3c39;
+  --color-danger-soft: #fdebec;
+  --color-info: #356982;
+  --color-info-soft: #e1f3fe;
+  --font-sans: "Helvetica Neue", "Avenir Next", Arial, sans-serif;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
-html, body {
-  background: var(--color-void);
-  color: var(--color-ink);
-  font-family: var(--font-mono);
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
 }
 
-/* Ambient CRT wash + scanlines. Cheap, and it sells the "command center" read. */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 100;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(0, 255, 156, 0.018) 0px,
-      rgba(0, 255, 156, 0.018) 1px,
-      transparent 1px,
-      transparent 3px
-    );
+body {
+  margin: 0;
 }
 
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 99;
-  background: radial-gradient(ellipse 120% 80% at 50% 0%, rgba(0, 255, 156, 0.045), transparent 60%);
+button,
+input {
+  font: inherit;
+}
+
+button,
+a,
+input {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--color-info);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-info-soft);
 }
 
 @layer utilities {
   .panel {
-    background: linear-gradient(180deg, var(--color-panel-2), var(--color-panel));
-    border: 1px solid var(--color-edge);
-    border-radius: 4px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 8px 32px -16px rgba(0, 0, 0, 0.9);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
   }
+
   .label {
-    font-size: 10px;
-    letter-spacing: 0.18em;
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-dim);
   }
-  .glow-phos { text-shadow: 0 0 18px rgba(0, 255, 156, 0.55); }
-  .glow-crit { text-shadow: 0 0 18px rgba(255, 59, 92, 0.55); }
-  .tnum { font-variant-numeric: tabular-nums; }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-/* ─── animations ─────────────────────────────────────────────────────────── */
+@keyframes soft-land {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 
-@keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 rgba(0, 255, 156, 0.5); }
-  70%  { box-shadow: 0 0 0 10px rgba(0, 255, 156, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(0, 255, 156, 0); }
-}
-.pulse-ring { animation: pulse-ring 1.8s infinite; }
-
-@keyframes intel-land {
-  0%   { background-color: rgba(0, 255, 156, 0.22); transform: translateX(-6px); opacity: 0; }
-  35%  { background-color: rgba(0, 255, 156, 0.14); transform: translateX(0); opacity: 1; }
-  100% { background-color: transparent; }
-}
-.intel-land { animation: intel-land 1.4s ease-out; }
-
-@keyframes crit-land {
-  0%   { background-color: rgba(255, 59, 92, 0.3); transform: translateX(-6px); opacity: 0; }
-  35%  { background-color: rgba(255, 59, 92, 0.16); transform: translateX(0); opacity: 1; }
-  100% { background-color: transparent; }
-}
-.crit-land { animation: crit-land 1.6s ease-out; }
-
-@keyframes blink { 50% { opacity: 0.18; } }
-.blink { animation: blink 1.1s step-end infinite; }
-
-@keyframes flash-screen {
-  0%, 100% { opacity: 0; }
-  20%      { opacity: 1; }
-}
-.flash-screen { animation: flash-screen 0.7s ease-out; }
-
-@keyframes caret { 50% { opacity: 0; } }
-.caret::after {
-  content: '▊';
-  margin-left: 2px;
-  animation: caret 0.9s step-end infinite;
-  color: var(--color-phos);
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* ─── scrollbars ─────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-edge-hot); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-phos-dim); }
+@keyframes quiet-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.soft-land {
+  animation: soft-land 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.quiet-pulse {
+  animation: quiet-pulse 1.4s ease-in-out infinite;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+@media (min-width: 1024px) {
+  body {
+    overflow: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

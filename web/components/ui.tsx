@@ -18,8 +18,8 @@ export function Panel({
   return (
     <section className={`panel flex min-h-0 flex-col ${className}`}>
       {title && (
-        <header className="flex items-center justify-between border-b border-edge px-3 py-2">
-          <h2 className="label">{title}</h2>
+        <header className="flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-text">{title}</h2>
           {right}
         </header>
       )}
@@ -28,14 +28,12 @@ export function Panel({
   );
 }
 
-export function Dot({ on, color = 'var(--color-phos)' }: { on: boolean; color?: string }) {
+export function Dot({ on, color = 'var(--color-positive)' }: { on: boolean; color?: string }) {
   return (
     <span
-      className="inline-block h-1.5 w-1.5 rounded-full"
-      style={{
-        background: on ? color : 'var(--color-dimmer)',
-        boxShadow: on ? `0 0 8px ${color}` : 'none',
-      }}
+      aria-hidden="true"
+      className="inline-block h-2 w-2 shrink-0 rounded-full"
+      style={{ background: on ? color : 'var(--color-faint)' }}
     />
   );
 }
@@ -48,35 +46,33 @@ export function Pill({
   tone?: 'dim' | 'phos' | 'crit' | 'amber' | 'info';
 }) {
   const tones: Record<string, string> = {
-    dim: 'border-edge text-dim',
-    phos: 'border-phos/40 text-phos',
-    crit: 'border-crit/40 text-crit',
-    amber: 'border-amber/40 text-amber',
-    info: 'border-info/40 text-info',
+    dim: 'border-border bg-surface-subtle text-muted',
+    phos: 'border-positive/20 bg-positive-soft text-positive',
+    crit: 'border-danger/20 bg-danger-soft text-danger',
+    amber: 'border-warning/20 bg-warning-soft text-warning',
+    info: 'border-info/20 bg-info-soft text-info',
   };
+
   return (
-    <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] tracking-wider uppercase ${tones[tone]}`}>
+    <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold tracking-[0.08em] uppercase ${tones[tone]}`}>
       {children}
     </span>
   );
 }
 
-/** Vertical bar meter — mic input and agent output. */
 export function LevelMeter({ level, color, label }: { level: number; color: string; label: string }) {
-  const bars = 22;
+  const bars = 12;
   const lit = Math.min(bars, Math.round(Math.pow(Math.min(1, level * 1.6), 0.6) * bars));
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="label w-10 shrink-0">{label}</span>
-      <div className="flex flex-1 gap-[2px]">
+    <div className="flex items-center gap-3">
+      <span className="label w-12 shrink-0">{label}</span>
+      <div className="flex flex-1 gap-1" aria-label={`${label} audio level`}>
         {Array.from({ length: bars }).map((_, i) => (
           <span
             key={i}
-            className="h-2.5 flex-1 rounded-[1px] transition-colors duration-75"
-            style={{
-              background: i < lit ? color : 'var(--color-edge)',
-              boxShadow: i < lit ? `0 0 6px ${color}66` : 'none',
-            }}
+            className="h-1.5 flex-1 rounded-full transition-colors duration-75"
+            style={{ background: i < lit ? color : 'var(--color-border)' }}
           />
         ))}
       </div>
