@@ -82,6 +82,7 @@ export class Session extends EventEmitter {
     this.metricsTimer = null;
     this.idleTimer = null;
     this.maxDurationTimer = null;
+    this.playbackTimers = new Set();
   }
 
   // ─── lifecycle ────────────────────────────────────────────────────────────
@@ -128,6 +129,8 @@ export class Session extends EventEmitter {
     clearInterval(this.metricsTimer);
     clearTimeout(this.idleTimer);
     clearTimeout(this.maxDurationTimer);
+    for (const timer of this.playbackTimers) clearTimeout(timer);
+    this.playbackTimers.clear();
     this.#cancelAgentTurn();
     this.dg?.close();
     this.dg = null;
@@ -413,7 +416,12 @@ export class Session extends EventEmitter {
     }
 
     // Safety net in case the browser never reports playback completion.
-    setTimeout(() => this.notePlaybackDone(turnId), 2000 + finalText.length * 70);
+    const playbackTimer = setTimeout(() => {
+      this.playbackTimers.delete(playbackTimer);
+      this.notePlaybackDone(turnId);
+    }, 2000 + finalText.length * 70);
+    this.playbackTimers.add(playbackTimer);
+    playbackTimer.unref?.();
     return full;
   }
 

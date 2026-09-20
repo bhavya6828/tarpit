@@ -3,7 +3,9 @@ import { extractIntel, luhnValid } from './intel.js';
 const SENSITIVE_TYPES = new Set(['payment_card', 'bank_routing', 'bank_account']);
 
 export function maskDigits(value) {
-  const digits = String(value || '').replace(/\D/g, '');
+  const text = String(value || '');
+  if (/^\*+\d{4}$/.test(text)) return text;
+  const digits = text.replace(/\D/g, '');
   if (digits.length < 4) return '****';
   return `${'*'.repeat(Math.max(4, digits.length - 4))}${digits.slice(-4)}`;
 }
@@ -28,6 +30,7 @@ export function redactPaymentText(value, intel = []) {
 export function redactIntelItem(item, intel = [item]) {
   return {
     ...item,
+    id: redactPaymentText(item.id, intel),
     value: SENSITIVE_TYPES.has(item.type) ? maskDigits(item.meta?.last4 || item.value) : item.value,
     source_utterance: redactPaymentText(item.source_utterance, intel),
   };

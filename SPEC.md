@@ -340,8 +340,8 @@ the critical path of a call.
 The local store reloads all valid JSONL records on process start, so reports remain
 available when Elasticsearch is absent or fails. Payment cards, routing numbers,
 and bank account numbers are masked before any memory, JSONL, or Elasticsearch
-write. Local records have no automatic expiry and remain until the operator deletes
-the files under `data/`.
+write, including artifact identifiers. Local records have no automatic expiry and
+remain until the operator deletes the files under `data/`.
 
 ---
 
@@ -575,6 +575,8 @@ Audio fixtures are cached in `data/` keyed by script hash, so repeat runs cost n
 
 ### Verified
 
+- Automated type-to-talk loop with fake provider edges through persona audio,
+  extraction, JSONL, process-restart recovery, case file, STIX, Markdown, and FTC.
 - Full loop end to end with live keys across all four services.
 - Spoken routing number → transcription → ABA checksum PASS → indexed.
 - Barge-in cancelling generation and flushing queued audio.

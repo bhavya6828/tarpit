@@ -50,8 +50,8 @@ const uuid5ish = (seed) =>
 
 // ─── Case file ──────────────────────────────────────────────────────────────
 
-export async function buildCaseFile(sessionId) {
-  const { session, intel, utterances } = await store.sessionBundle(sessionId);
+export async function buildCaseFile(sessionId, source = store) {
+  const { session, intel, utterances } = await source.sessionBundle(sessionId);
   if (!session && !intel.length) return null;
 
   const persona = getPersona(session?.persona);
@@ -61,7 +61,7 @@ export async function buildCaseFile(sessionId) {
   // Cross-call correlation: has any of this appeared in another engagement?
   const repeats = [];
   for (const item of intel.filter((i) => ['crypto_wallet', 'bank_routing', 'callback_number', 'origin_number', 'payment_tag'].includes(i.type))) {
-    const hits = await store.correlate(item.value);
+    const hits = await source.correlate(item.value);
     const others = [...new Set(hits.map((h) => h.session_id))].filter((s) => s !== sessionId);
     if (others.length) repeats.push({ ...redactIntelItem(item, intel), also_seen_in: others, occurrences: hits.length });
   }
