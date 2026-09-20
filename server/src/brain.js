@@ -87,6 +87,20 @@ export function consecutiveStalls(persona, history) {
   return run;
 }
 
+const SCREENING_POSTURE = `
+You have just picked up and you do not yet know who this is or what they want.
+
+Be brief and ordinary. Say hello, answer what you are asked, and let them
+explain themselves. Two short sentences at most, often one.
+
+Do not volunteer anything. No stories, no tangents, no excuses, no searching
+for your glasses or your wallet. Do not act frightened or eager. If they have
+not said what they want yet, ask them plainly.
+
+If this turns out to be a real call from a real person, this is the whole
+conversation they will remember, so do not waste their time.
+`.trim();
+
 const BE_A_PERSON = `
 You have leaned on an excuse two turns running. Stop. This turn, just respond
 like an ordinary person would: answer what he asked, react to it, or ask him
@@ -189,6 +203,7 @@ export async function* streamPersonaReply({
   tactics = [],
   elapsedSeconds = 0,
   spokenFiller = null,
+  screening = false,
   intel = [],
   enrichment = null,
   turnCount = 0,
@@ -216,6 +231,13 @@ export async function* streamPersonaReply({
         elapsedSeconds / 60
       )} minutes. They are heavily invested and unlikely to walk away now. Keep dangling the carrot — stay maximally cooperative, stay maximally slow.`,
     });
+  }
+
+  // Until the call has been judged, give nothing away. Someone who turns out to
+  // be a real person should get an ordinary, forgettable exchange, not a
+  // performance aimed at wasting their afternoon.
+  if (screening) {
+    messages.push({ role: 'system', content: SCREENING_POSTURE });
   }
 
   // What it already knows, before what it should avoid saying. Facts first.

@@ -14,6 +14,7 @@ import { getPersona, DEFAULT_PERSONA } from './personas.js';
 import { extractIntel, detectSignals, enrichIntel } from './intel.js';
 import { store } from './elastic.js';
 import { config } from './config.js';
+import { telephonyPrior, scoreUtterance, screeningVerdict } from './screening.js';
 
 /** Did this error come from us deliberately cancelling the request? */
 function isAbort(err) {
@@ -89,6 +90,11 @@ export class Session extends EventEmitter {
     this.pendingUtterance = '';
     this.muteWhileSpeaking = false;
     this.lastTactics = [];
+    // A call is not assumed hostile. It is screened.
+    this.phase = 'screening';
+    this.screenScore = 0;
+    this.screenReasons = [];
+    this.screenUtterances = 0;
     this.callerSpeakingSince = 0;
     this.lastBackchannelAt = 0;
     this.backchannelCount = 0;
@@ -122,6 +128,20 @@ export class Session extends EventEmitter {
       onSpeechStarted: () => this.#onSpeechStarted(),
       onError: (e) => this.emit('event', { type: 'error', scope: 'deepgram', message: e.message }),
     });
+
+    // Inbound signalling gives a prior before anybody has spoken.
+    const prior = telephonyPrior(this.caller);
+    this.screenScore = prior.score;
+    this.screenReasons = [...prior.reasons];
+    if (prior.reasons.length) {
+      this.emit('event', {
+        type: 'screening',
+        phase: this.phase,
+        score: this.screenScore,
+        reasons: this.screenReasons,
+        stage: 'signalling',
+      });
+    }
 
     this.metricsTimer = setInterval(() => this.emit('event', { type: 'metrics', ...this.metrics() }), 500);
     this.maxDurationTimer = setTimeout(() => this.stop('max_duration'), this.maxDurationMs);
@@ -208,6 +228,53 @@ export class Session extends EventEmitter {
       this.silenceFrame = Buffer.alloc(buf.length);
     }
     return this.silenceFrame;
+  }
+
+  /**
+   * Score what the caller just said and decide whether to commit.
+   *
+   * Staying in screening is a real outcome. Engaging a genuine caller wastes a
+   * stranger's time, so it takes a decisive score; releasing a genuine scammer
+   * only loses evidence that was never collected.
+   */
+  #screen(text) {
+    const assessed = scoreUtterance(text);
+    this.screenScore += assessed.score;
+    this.screenUtterances++;
+    for (const reason of assessed.reasons) {
+      if (!this.screenReasons.includes(reason)) this.screenReasons.push(reason);
+    }
+
+    const verdict = screeningVerdict({
+      score: this.screenScore,
+      utterances: this.screenUtterances,
+    });
+
+    if (verdict === 'scam') this.phase = 'engaged';
+    else if (verdict === 'legitimate') this.phase = 'released';
+
+    this.emit('event', {
+      type: 'screening',
+      phase: this.phase,
+      score: this.screenScore,
+      reasons: this.screenReasons,
+      utterances: this.screenUtterances,
+      stage: 'content',
+    });
+  }
+
+  /** Operator override, for demonstrating the engaged behaviour directly. */
+  forceEngage() {
+    if (this.phase === 'engaged') return;
+    this.phase = 'engaged';
+    this.screenReasons.push('Engaged manually by the operator');
+    this.emit('event', {
+      type: 'screening',
+      phase: this.phase,
+      score: this.screenScore,
+      reasons: this.screenReasons,
+      stage: 'manual',
+    });
   }
 
   /**
@@ -352,6 +419,8 @@ export class Session extends EventEmitter {
     this.turnCount++;
     this.history.push({ role: 'user', content: scammerText });
 
+    if (this.phase === 'screening') this.#screen(scammerText);
+
     const signals = detectSignals(scammerText);
     if (signals.length) this.emit('event', { type: 'signals', signals, cause });
 
@@ -375,6 +444,7 @@ export class Session extends EventEmitter {
         intel: this.intel,
         enrichment: this.enrichment,
         turnCount: this.turnCount,
+        screening: this.phase === 'screening',
         // Told what was already said aloud, so the reply continues from it
         // instead of stacking a second interjection in front.
         spokenFiller: filler || null,
@@ -670,6 +740,8 @@ export class Session extends EventEmitter {
       session_id: this.id,
       '@timestamp': new Date(this.startedAt || Date.now()).toISOString(),
       persona: this.persona.id,
+      phase: this.phase,
+      screen_score: this.screenScore,
       transport: this.transport,
       caller_number: this.caller?.from || null,
       caller_carrier: this.caller?.carrier || null,
