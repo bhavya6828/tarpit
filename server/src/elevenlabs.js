@@ -13,6 +13,40 @@ export function supportsWebsocket(model) {
   return !WEBSOCKET_INCOMPATIBLE.test(String(model));
 }
 
+const SENTENCE_ABBR = /(?:^|\s)(mr|mrs|ms|dr|st|jr|sr|prof|rev|lt|sgt|capt|dept|apt|no|vs|etc|inc|ltd|co)$/i;
+
+/**
+ * Pull completed sentences off a growing buffer.
+ *
+ * The HTTP path synthesizes each sentence as it arrives instead of waiting for
+ * the whole reply, because request latency scales with the text sent. An
+ * unterminated tail stays in the buffer so no word is ever cut in half.
+ */
+export function takeSentences(buffer) {
+  const input = String(buffer ?? '');
+  const sentences = [];
+  let start = 0;
+
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+    if (c !== '.' && c !== '!' && c !== '?') continue;
+
+    const next = input[i + 1];
+    // No lookahead yet means the sentence may not be over.
+    if (next === undefined) break;
+    if (!/\s/.test(next)) continue;
+
+    const head = input.slice(start, i);
+    if (c === '.' && SENTENCE_ABBR.test(head)) continue;
+    if (c === '.' && /(?:^|[\s.])[A-Z]$/.test(head)) continue;
+
+    sentences.push(input.slice(start, i + 1));
+    start = i + 1;
+  }
+
+  return { sentences, rest: input.slice(start) };
+}
+
 const FILLER_DIR = path.resolve(process.cwd(), 'data', 'fillers');
 
 /** Identity of one cached filler clip. Voice, model and codec all change the audio. */
@@ -166,6 +200,9 @@ export class ElevenLabsBatch {
     this.buffer = '';
     this.cancelled = false;
     this.controller = new AbortController();
+    this.slots = [];
+    this.jobs = [];
+    this.nextEmit = 0;
   }
 
   get immediate() {
@@ -175,6 +212,54 @@ export class ElevenLabsBatch {
   push(text) {
     if (!text || this.cancelled) return;
     this.buffer += text;
+    const { sentences, rest } = takeSentences(this.buffer);
+    this.buffer = rest;
+    for (const sentence of sentences) {
+      if (sentence.trim()) this.#dispatch(sentence);
+    }
+  }
+
+  /**
+   * Start synthesizing one sentence.
+   *
+   * Requests may be in flight together, but each writes into its own ordered
+   * slot and audio is released only from the head. Emitting as responses land
+   * would rearrange the persona's words.
+   */
+  #dispatch(text) {
+    const slot = { chunks: [], done: false };
+    this.slots.push(slot);
+
+    const job = (async () => {
+      try {
+        const res = await this.#open(text);
+        for await (const chunk of res.body) {
+          if (this.cancelled) return;
+          slot.chunks.push(Buffer.from(chunk));
+          this.#drain();
+        }
+      } catch (err) {
+        if (!this.cancelled && err?.name !== 'AbortError') this.onError(err);
+      } finally {
+        slot.done = true;
+        this.#drain();
+      }
+    })();
+
+    this.jobs.push(job);
+  }
+
+  /** Release audio from the head slot only, advancing as each finishes. */
+  #drain() {
+    while (this.nextEmit < this.slots.length) {
+      const slot = this.slots[this.nextEmit];
+      while (slot.chunks.length) {
+        const chunk = slot.chunks.shift();
+        if (!this.cancelled) this.onAudio(chunk, null);
+      }
+      if (!slot.done) break;
+      this.nextEmit++;
+    }
   }
 
   /** Speak a fixed phrase right away, from disk when we have heard it before. */
@@ -207,22 +292,20 @@ export class ElevenLabsBatch {
   }
 
   async end() {
-    const text = this.buffer.trim();
+    const tail = this.buffer.trim();
     this.buffer = '';
-    if (!text || this.cancelled) {
-      this.onDone();
-      return;
+    if (tail) this.#dispatch(tail);
+
+    // Jobs can queue more jobs, so settle until nothing new appears.
+    let settled = 0;
+    while (settled < this.jobs.length) {
+      const pending = this.jobs.slice(settled);
+      settled = this.jobs.length;
+      await Promise.allSettled(pending);
     }
-    try {
-      const res = await this.#open(text);
-      for await (const chunk of res.body) {
-        if (this.cancelled) return;
-        this.onAudio(Buffer.from(chunk), null);
-      }
-      if (!this.cancelled) this.onDone();
-    } catch (err) {
-      if (!this.cancelled && err?.name !== 'AbortError') this.onError(err);
-    }
+
+    this.#drain();
+    if (!this.cancelled) this.onDone();
   }
 
   async #open(text) {

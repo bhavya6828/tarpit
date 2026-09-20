@@ -67,6 +67,11 @@ const t0 = Date.now();
 const ts = () => `[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s]`;
 let audioBytes = 0;
 let audioFrames = 0;
+// Time from the caller's last word to the persona's first audible sample. This
+// is the number the caller actually feels, and the one ElevenLabs judges on.
+let callerStoppedAt = 0;
+let awaitingReply = false;
+const responseTimes = [];
 
 ws.on('error', (e) => {
   console.error(`\n  cannot reach the server on :${PORT} — is "npm run dev" running?\n  ${e.message}`);
@@ -104,11 +109,21 @@ ws.on('message', (d, isBinary) => {
   if (isBinary) {
     audioBytes += d.length;
     audioFrames++;
+    if (awaitingReply) {
+      awaitingReply = false;
+      const ms = Date.now() - callerStoppedAt;
+      responseTimes.push(ms);
+      console.log(`${ts()}   \u23f1 first audio ${ms}ms after caller stopped`);
+    }
     return;
   }
   const e = JSON.parse(d.toString());
   switch (e.type) {
     case 'transcript':
+      if (e.speaker === 'scammer') {
+        callerStoppedAt = Date.now();
+        awaitingReply = true;
+      }
       console.log(`${ts()} ${e.speaker === 'scammer' ? '◀ CALLER' : '▶ PERSONA'}: ${e.text}`);
       break;
     case 'intel':
@@ -141,5 +156,10 @@ ws.on('message', (d, isBinary) => {
 function finish() {
   const secs = (audioBytes - audioFrames * 4) / 2 / 24000;
   console.log(`\n  persona spoke ${secs.toFixed(1)}s across ${audioFrames} audio frames`);
+  if (responseTimes.length) {
+    const sorted = [...responseTimes].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    console.log(`  response latency: median ${median}ms, worst ${sorted[sorted.length - 1]}ms, over ${sorted.length} turn(s)`);
+  }
   process.exit(0);
 }

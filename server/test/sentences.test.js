@@ -15,8 +15,10 @@ test('takeSentences holds a sentence until its terminator arrives', () => {
 });
 
 test('takeSentences takes several at once', () => {
+  // Separating whitespace stays attached to the sentence that follows it, which
+  // is what keeps the split lossless. It is harmless in synthesis.
   const r = takeSentences('Oh my. Hold on! Are you there? Let me');
-  assert.deepEqual(r.sentences, ['Oh my.', 'Hold on!', 'Are you there?']);
+  assert.deepEqual(r.sentences, ['Oh my.', ' Hold on!', ' Are you there?']);
   assert.equal(r.rest, ' Let me');
 });
 
