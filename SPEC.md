@@ -82,9 +82,14 @@ captured evidence, and open the referral package.
 
 - The default desktop layout keeps Session, Conversation, and Evidence visible in
   three clear work areas without decorative command-center effects.
-- Narrow viewports provide labeled tabs for all three work areas. Metrics and intel
-  remain reachable on mobile rather than disappearing.
+- The three-column workspace begins at 1280 pixels, when all work areas fit without
+  horizontal clipping. Below that width, labeled tabs provide all three work areas.
+  Metrics and intel remain reachable rather than disappearing.
+- Workspace tabs expose tablist, tab, and tabpanel semantics, including the selected
+  state and panel relationship for assistive technology.
 - The start or end engagement action is the only visually dominant control.
+- Opening the referral package moves keyboard focus into its dialog. Closing it
+  returns focus to the control that opened it.
 - Persona choice, phone-line audio, half-duplex audio, and referral access are grouped
   by task and use plain labels.
 - Normal, empty, connecting, live, ended, missing-key, and offline states remain

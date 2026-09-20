@@ -75,7 +75,21 @@ test('command center keeps every work area reachable on narrow screens', () => {
   assert.match(source, />Conversation</);
   assert.match(source, />Evidence</);
   assert.match(source, />Session</);
+  assert.match(source, /role="tablist"/);
+  assert.match(source, /role="tab"/);
+  assert.match(source, /aria-controls=/);
+  assert.match(source, /role="tabpanel"/);
   assert.doesNotMatch(source, /hidden min-h-0 lg:block/);
+});
+
+test('three-column workspace starts only when its minimum width fits', () => {
+  const source = readWebFile('components/CommandCenter.tsx');
+  const css = readWebFile('app/globals.css');
+
+  assert.match(source, /xl:grid-cols-\[280px_minmax\(420px,1fr\)_340px\]/);
+  assert.match(source, /xl:hidden/);
+  assert.doesNotMatch(source, /lg:grid-cols-\[280px_minmax\(420px,1fr\)_340px\]/);
+  assert.match(css, /@media \(min-width: 1280px\)/);
 });
 
 test('command center uses the dark console visual system', () => {
@@ -104,6 +118,10 @@ test('referral package is exposed as an accessible dialog', () => {
   assert.match(source, /role="dialog"/);
   assert.match(source, /aria-modal="true"/);
   assert.match(source, /aria-labelledby="case-file-title"/);
+  assert.match(source, /closeButtonRef/);
+  assert.match(source, /previousFocusRef/);
+  assert.match(source, /closeButtonRef\.current\?\.focus\(\)/);
+  assert.match(source, /previousFocusRef\.current\?\.focus\(\)/);
 });
 
 test('frontend integrates reconnect and safe frame helpers', () => {
