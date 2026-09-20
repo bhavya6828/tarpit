@@ -177,7 +177,7 @@ const RULES = [
     severity: 'high',
     scan(t) {
       const out = [];
-      for (const m of t.matchAll(/(?:\+?1[\s.-]?)?\(?([2-9]\d{2})\)?[\s.-]?([2-9]\d{2})[\s.-]?(\d{4})\b/g)) {
+      for (const m of t.matchAll(/(?<!\d)(?:\+?1[\s.-]?)?\(?([2-9]\d{2})\)?[\s.-]?([2-9]\d{2})[\s.-]?(\d{4})\b/g)) {
         const npa = m[1];
         if (/^(\d)\1\1$/.test(npa)) continue;
         // "my account number is 9988776655" is a drop account, not a callback.

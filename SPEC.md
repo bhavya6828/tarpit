@@ -292,6 +292,9 @@ three-pass normalizer runs before extraction:
 working text. Without this a 16-digit card is also reported as a phone number hiding
 inside its own digits.
 
+Callback candidates must also begin outside any longer digit sequence. An invalid
+card-like or reference number cannot leak an embedded ten-digit phone number.
+
 **Cross-variant dedupe.** Keys are the alphanumeric core of the value, so the raw and
 normalized passes don't both report `44-2291` and `442291`.
 
