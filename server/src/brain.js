@@ -42,6 +42,76 @@ export function recentOpeners(history, limit = 4) {
   );
 }
 
+/** Which of this persona's stock excuses have already been used aloud. */
+export function spentObstacles(persona, history) {
+  const said = (history || [])
+    .filter((m) => m.role === 'assistant')
+    .map((m) => String(m.content || ''))
+    .join(' ');
+
+  const spent = [];
+  for (const [name, pattern] of Object.entries(persona?.obstacles || {})) {
+    if (pattern.test(said)) spent.push(name);
+  }
+  return spent;
+}
+
+const ARTIFACT_ORDER = [
+  'bank_routing',
+  'bank_account',
+  'crypto_wallet',
+  'payment_card',
+  'payment_tag',
+  'gift_card',
+  'callback_number',
+];
+
+/**
+ * What the persona should already know, assembled from session state.
+ *
+ * A transcript alone makes a model improvise the next plausible line. Told
+ * plainly that it already has the routing number, it stops asking for it and
+ * stalls on something else, which is the behavior that reads as listening
+ * rather than reciting.
+ */
+export function describeCallState({ persona, history, intel = [], enrichment = null, elapsedSeconds = 0, turnCount = 0 }) {
+  const lines = [];
+
+  const who = [enrichment?.claimed_name, enrichment?.claimed_org].filter(Boolean).join(' of ');
+  if (who) lines.push(`The caller says he is ${who}.`);
+
+  const demand = [enrichment?.amount_demanded, enrichment?.payment_rail && `by ${enrichment.payment_rail}`]
+    .filter(Boolean)
+    .join(' ');
+  if (demand) lines.push(`He is demanding ${demand}.`);
+
+  const captured = ARTIFACT_ORDER.flatMap((type) =>
+    intel.filter((i) => i.type === type).map((i) => `${i.label} ${i.value}`)
+  );
+  if (captured.length) {
+    lines.push(
+      `You have ALREADY written down: ${captured.join('; ')}. ` +
+        'Do not ask for these again as though they are new. You may read one back wrong.'
+    );
+  }
+
+  const spent = spentObstacles(persona, history);
+  if (spent.length) {
+    lines.push(`Excuses you have already used, do not reuse them: ${spent.join(', ')}.`);
+  }
+
+  if (turnCount >= 4) {
+    lines.push(`You have held him ${Math.round(elapsedSeconds)}s across ${turnCount} exchanges.`);
+  }
+
+  if (!lines.length) return null;
+
+  return `WHAT YOU KNOW SO FAR IN THIS CALL:\n${lines.map((l) => `- ${l}`).join('\n')}\n
+Use this. Refer to specifics he has already given you. Answer the question he
+actually just asked, badly, rather than saying something that would fit any
+moment in the call.`;
+}
+
 /** Trim history but always keep the opening exchange for narrative continuity. */
 export function trimHistory(history) {
   if (history.length <= MAX_HISTORY_TURNS) return history;
@@ -65,6 +135,9 @@ export async function* streamPersonaReply({
   tactics = [],
   elapsedSeconds = 0,
   spokenFiller = null,
+  intel = [],
+  enrichment = null,
+  turnCount = 0,
   signal,
 }) {
   if (!openai) {
@@ -90,6 +163,10 @@ export async function* streamPersonaReply({
       )} minutes. They are heavily invested and unlikely to walk away now. Keep dangling the carrot — stay maximally cooperative, stay maximally slow.`,
     });
   }
+
+  // What it already knows, before what it should avoid saying. Facts first.
+  const state = describeCallState({ persona, history, intel, enrichment, elapsedSeconds, turnCount });
+  if (state) messages.push({ role: 'system', content: state });
 
   const openers = recentOpeners(history);
   if (openers.length) {

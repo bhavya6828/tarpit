@@ -141,6 +141,14 @@ export const PERSONAS = [
       'Hello... hold on, let me turn this down. There. Hello?',
     ],
     fillers: ['Oh my.', 'Well now.', 'Hold on, hold on.', 'Let me see here.', 'Oh dear.'],
+    obstacles: {
+      glasses: /glasses|reading specs|spectacles/i,
+      'the cat': /biscuits|the cat\b/i,
+      wallet: /wallet|billfold/i,
+      'his grandson': /tyler|grandson/i,
+      'sitting down': /sit down|sit myself|catch my breath/i,
+      'a pen': /\bpen\b|something to write/i,
+    },
     systemPrompt: build(`
 You are Harold Pemberton, 85 years old, a retired postal inspector living alone
 in Ohio. Your wife Doreen passed four years ago. You are lonely in a way you
@@ -193,6 +201,13 @@ plausible ways — fifteen becomes fifty, five becomes nine. You apologize a lot
       'Yello. Yeah, hi, is this the pizza place?',
     ],
     fillers: ['Uh huh.', 'Okay, okay.', 'Right, right.', 'Sure, yeah.', 'Gotcha.'],
+    obstacles: {
+      'the porch': /porch|front step|driveway/i,
+      'the dog': /wendell|the dog\b/i,
+      'the order number': /order number|receipt/i,
+      'his wife': /\bkim\b|my wife/i,
+      'the oven': /oven|the timer/i,
+    },
     systemPrompt: build(`
 You are Dale Kruger, 44, an HVAC guy from Wisconsin. You ordered a large meat
 lover's with extra jalapeños and a two-liter about forty minutes ago and it has
@@ -243,6 +258,13 @@ SPEECH: chipper, flat vowels, "ope", "you betcha", "no yeah". Short sentences.
       'Hey, yeah? Who is this?',
     ],
     fillers: ['Wait.', 'Okay so.', 'Hold on, hold on.', 'Right, yeah, no.', 'Uh...'],
+    obstacles: {
+      'his roommate': /prakash|roommate/i,
+      'the laptop': /laptop|my computer|the fan/i,
+      'the banking app': /the app\b|two.factor|2fa|logged out/i,
+      'his mom calling': /\bmom\b|other line/i,
+      'the door': /the door|someone.s here|the ra\b/i,
+    },
     systemPrompt: build(`
 You are Kevin Ostrowski, 20, a sophomore at a big state school, in your dorm at
 an hour you should not be awake. You are doing four things at once and this
@@ -293,6 +315,13 @@ sentences over. You trail off because something happened in the room.
       'Hey! Hi. Hold on, let me get to a quieter spot.',
     ],
     fillers: ['Oh, honey.', 'Bless your heart.', 'Now hold on.', 'Well, I declare.', 'Mm, okay.'],
+    obstacles: {
+      'her purse': /purse|pocketbook/i,
+      'the church van': /church van|the van\b/i,
+      'her daughter': /kayla|my daughter/i,
+      'her knee': /my knee|this knee/i,
+      'her glasses': /glasses|readers/i,
+    },
     systemPrompt: build(`
 You are Brenda Vance, 62, from outside Chattanooga. You run the volunteer
 schedule for your church and you have never in your life ended a phone call in

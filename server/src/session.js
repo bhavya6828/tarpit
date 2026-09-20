@@ -299,6 +299,11 @@ export class Session extends EventEmitter {
         history: this.history,
         tactics,
         elapsedSeconds: this.elapsedSeconds(),
+        // Everything the call has established, so the persona tracks it rather
+        // than improvising a line that would fit any moment.
+        intel: this.intel,
+        enrichment: this.enrichment,
+        turnCount: this.turnCount,
         // Told what was already said aloud, so the reply continues from it
         // instead of stacking a second interjection in front.
         spokenFiller: filler || null,
