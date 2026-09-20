@@ -72,6 +72,43 @@ export function alignSamples(chunk, carry = EMPTY, width = 2) {
   return { emit: buf.subarray(0, buf.length - remainder), carry: Buffer.from(buf.subarray(buf.length - remainder)) };
 }
 
+/**
+ * Release the first span of a reply as soon as it is worth speaking.
+ *
+ * Waiting for a whole sentence is right for every span but the first, where it
+ * is the only thing standing between the caller and any audio at all. A clause
+ * break is enough to plan intonation over, provided it is long enough: a stub
+ * like "Oh my," is exactly the clipped delivery that sounded like dictation.
+ */
+export function takeOpeningSpan(buffer, minChars = 24) {
+  const input = String(buffer ?? '');
+
+  const sentence = takeSentences(input);
+  if (sentence.sentences.length) {
+    const span = sentence.sentences[0];
+    if (span.trim().length >= minChars) {
+      return { span, rest: input.slice(span.length) };
+    }
+  }
+
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+    if (c !== ',' && c !== ';' && c !== ':') continue;
+    const span = input.slice(0, i + 1);
+    if (span.trim().length < minChars) continue;
+    return { span, rest: input.slice(i + 1) };
+  }
+
+  // A reply with no early punctuation would otherwise hold every sample back
+  // until a sentence finally ended. Past this length, break on a word instead.
+  if (input.length >= 80) {
+    const cut = input.lastIndexOf(' ', 80);
+    if (cut >= minChars) return { span: input.slice(0, cut + 1), rest: input.slice(cut + 1) };
+  }
+
+  return { span: null, rest: input };
+}
+
 const FILLER_DIR = path.resolve(process.cwd(), 'data', 'fillers');
 
 /** Identity of one cached filler clip. Voice, model and codec all change the audio. */
@@ -237,6 +274,16 @@ export class ElevenLabsBatch {
   push(text) {
     if (!text || this.cancelled) return;
     this.buffer += text;
+
+    // Nothing has been sent yet, so this span is the caller's whole wait. Break
+    // it on a clause rather than a sentence to start the audio sooner.
+    if (!this.slots.length) {
+      const { span, rest } = takeOpeningSpan(this.buffer);
+      if (!span) return;
+      this.buffer = rest;
+      this.#dispatch(span);
+    }
+
     const { sentences, rest } = takeSentences(this.buffer);
     this.buffer = rest;
     for (const sentence of sentences) {

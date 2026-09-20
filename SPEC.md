@@ -509,6 +509,14 @@ waiting for the whole reply. Together that roughly halves time to audio:
 | v3, per sentence | **~1.5 s** |
 | turbo, websocket stream | ~1.2 s |
 
+The **first** span of a reply is released on a clause break rather than a sentence end,
+because it is the only thing between the caller and any audio at all. It must still
+clear a minimum length, since a stub like "Oh my," is the clipped delivery that made
+the voice sound like dictation, and a long run-on breaks on a word rather than holding
+every sample back. This matters most on the roughly two thirds of turns where no
+filler fires: those measured 2339ms and 3808ms to first audio against 929ms when one
+did, and now land between 1221ms and 1685ms.
+
 Requests are issued as each sentence completes and may be in flight together, but
 audio is emitted strictly in sentence order. The head sentence streams straight
 through; later ones buffer until their turn, which is cheap because a sentence is
