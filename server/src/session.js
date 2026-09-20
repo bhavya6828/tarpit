@@ -8,6 +8,16 @@ import { extractIntel, detectSignals, enrichIntel } from './intel.js';
 import { store } from './elastic.js';
 import { config } from './config.js';
 
+/** Did this error come from us deliberately cancelling the request? */
+function isAbort(err) {
+  if (!err) return false;
+  return (
+    err.name === 'AbortError' ||
+    err.name === 'APIUserAbortError' ||
+    /abort/i.test(err.message || '')
+  );
+}
+
 const IDLE_NUDGE_MS = 9000;      // scammer silent this long → agent fills the gap
 const ENRICH_EVERY_TURNS = 3;    // LLM intel enrichment cadence
 const SPEAK_GRACE_MS = 700;      // ignore barge-in right after agent starts talking
@@ -20,10 +30,13 @@ const SPEAK_GRACE_MS = 700;      // ignore barge-in right after agent starts tal
  *                    └──► intel extraction ──► Elastic          PCM ────┘──► browser
  */
 export class Session extends EventEmitter {
-  constructor({ personaId = DEFAULT_PERSONA } = {}) {
+  constructor({ personaId = DEFAULT_PERSONA, transport = 'browser', caller = null } = {}) {
     super();
     this.id = randomUUID().slice(0, 8);
     this.persona = getPersona(personaId);
+    this.transport = transport;
+    // Telephony forensics for a real inbound call; null for the browser demo.
+    this.caller = caller;
     this.status = 'idle';
 
     this.history = [];
@@ -58,9 +71,17 @@ export class Session extends EventEmitter {
     if (this.status === 'live') return;
     this.status = 'live';
     this.startedAt = Date.now();
-    this.emit('event', { type: 'session_start', sessionId: this.id, persona: this.#personaCard() });
+    this.emit('event', {
+      type: 'session_start',
+      sessionId: this.id,
+      persona: this.#personaCard(),
+      transport: this.transport,
+      caller: this.caller,
+    });
+    if (this.caller) this.#harvestCaller();
 
     this.dg = new DeepgramStream({
+      transport: this.transport,
       onOpen: () => this.emit('event', { type: 'stt_ready' }),
       onTranscript: (t) => this.#onTranscript(t),
       onUtteranceEnd: () => this.#flushTurn('utterance_end'),
@@ -259,7 +280,11 @@ export class Session extends EventEmitter {
 
       spoken = await this.#speak(filler, { prefixOf: stream });
     } catch (err) {
-      if (err?.name !== 'AbortError') {
+      // A barge-in aborts the in-flight completion on purpose. The OpenAI SDK
+      // surfaces that as a plain error rather than a DOMException, so match on
+      // the message too — otherwise every interruption paints a red error in
+      // the command center mid-demo.
+      if (!isAbort(err)) {
         this.emit('event', { type: 'error', scope: 'brain', message: err.message });
       }
     }
@@ -295,6 +320,7 @@ export class Session extends EventEmitter {
 
     let full = '';
     const tts = new ElevenLabsStream({
+      transport: this.transport,
       voiceId: this.persona.voiceId,
       voiceSettings: this.persona.voiceSettings,
       onAudio: (pcm) => {
@@ -363,6 +389,67 @@ export class Session extends EventEmitter {
   }
 
   // ─── Intel ────────────────────────────────────────────────────────────────
+
+  /**
+   * Turn inbound-call metadata into indexed artifacts.
+   *
+   * This is the intel a phone call actually yields. There is no IP address to
+   * read off a PSTN call — the audio arrives over the carrier network — but the
+   * signalling carries the caller ID, the originating carrier, the line type,
+   * and a STIR/SHAKEN attestation saying whether that caller ID was
+   * cryptographically vouched for or is very likely spoofed.
+   */
+  #harvestCaller() {
+    const c = this.caller;
+    const items = [];
+    const mk = (type, label, value, severity, meta) => ({
+      id: `${this.id}-${type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      session_id: this.id,
+      type,
+      label,
+      value,
+      severity,
+      score: { critical: 95, high: 75, medium: 50, low: 25 }[severity] ?? 40,
+      speaker: 'network',
+      meta: meta || {},
+      source_utterance: 'inbound call signalling',
+      '@timestamp': new Date().toISOString(),
+    });
+
+    if (c.from) {
+      items.push(mk('origin_number', 'Originating number', c.from, 'high', {
+        e164: c.from,
+        city: c.fromCity || '—',
+        state: c.fromState || '—',
+        country: c.fromCountry || '—',
+      }));
+    }
+    if (c.carrier || c.lineType) {
+      items.push(mk('carrier', 'Originating carrier', c.carrier || 'unknown', 'medium', {
+        line_type: c.lineType || 'unknown',
+        mobile_country_code: c.mcc || '—',
+        mobile_network_code: c.mnc || '—',
+      }));
+    }
+    if (c.attestation) {
+      const spoofed = c.attestation === 'C' || c.attestation === 'failed';
+      items.push(
+        mk('caller_id_attestation', 'STIR/SHAKEN attestation', c.attestationLabel || c.attestation, spoofed ? 'critical' : 'medium', {
+          attestation: c.attestation,
+          verdict: c.attestationVerdict || '—',
+          verstat: c.verstat || '—',
+        })
+      );
+    }
+    if (c.callerName) {
+      items.push(mk('caller_name', 'CNAM (claimed caller ID name)', c.callerName, 'medium', { source: 'CNAM lookup' }));
+    }
+
+    if (!items.length) return;
+    this.intel.push(...items);
+    for (const item of items) this.emit('event', { type: 'intel', item });
+    store.indexIntel(items);
+  }
 
   #harvest(text, speaker) {
     const found = extractIntel(text, { sessionId: this.id, speaker, seen: this.seenIntel });
@@ -451,6 +538,10 @@ export class Session extends EventEmitter {
       session_id: this.id,
       '@timestamp': new Date(this.startedAt || Date.now()).toISOString(),
       persona: this.persona.id,
+      transport: this.transport,
+      caller_number: this.caller?.from || null,
+      caller_carrier: this.caller?.carrier || null,
+      caller_attestation: this.caller?.attestation || null,
       status: this.status,
       seconds_wasted: Number(m.secondsWasted.toFixed(2)),
       cost_destroyed_usd: Number(m.costDestroyed.toFixed(4)),

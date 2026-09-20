@@ -10,7 +10,9 @@ export const config = {
 
   elevenlabs: {
     key: process.env.ELEVENLABS_API_KEY || '',
-    model: process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5',
+    // turbo over flash: +116ms to first byte, audibly better prosody. On a
+    // phone call that latency delta is invisible; the quality delta is not.
+    model: process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5',
     // 24kHz PCM: no decode step in the browser, no gaps between chunks.
     outputFormat: 'pcm_24000',
     sampleRate: 24000,
@@ -37,7 +39,45 @@ export const config = {
 
   // Mic capture rate the browser ships us; Deepgram is told the same.
   inputSampleRate: 16000,
+
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    authToken: process.env.TWILIO_AUTH_TOKEN || '',
+    number: process.env.TWILIO_NUMBER || '',
+    // Public https origin the phone network can reach (ngrok/cloudflared).
+    publicUrl: (process.env.PUBLIC_URL || '').replace(/\/$/, ''),
+    personaId: process.env.TWILIO_PERSONA || 'harold',
+  },
 };
+
+/**
+ * Audio formats differ per transport, so both streaming clients are told which
+ * one they're serving rather than reading a global.
+ *
+ * The phone path deliberately stays in mu-law 8kHz end to end: Deepgram accepts
+ * it natively and ElevenLabs emits it natively, so a real call involves zero
+ * resampling in our process — fewer moving parts and less latency than
+ * converting to PCM and back.
+ */
+export const TRANSPORTS = {
+  browser: {
+    stt: { encoding: 'linear16', sampleRate: 16000 },
+    tts: { outputFormat: 'pcm_24000', sampleRate: 24000 },
+  },
+  twilio: {
+    stt: { encoding: 'mulaw', sampleRate: 8000 },
+    tts: { outputFormat: 'ulaw_8000', sampleRate: 8000 },
+  },
+};
+
+export function twilioReady() {
+  const t = config.twilio;
+  const missing = [];
+  if (!t.accountSid) missing.push('TWILIO_ACCOUNT_SID');
+  if (!t.authToken) missing.push('TWILIO_AUTH_TOKEN');
+  if (!t.publicUrl) missing.push('PUBLIC_URL');
+  return { ok: missing.length === 0, missing };
+}
 
 export function missingKeys() {
   const missing = [];

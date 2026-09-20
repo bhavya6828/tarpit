@@ -34,6 +34,7 @@ Open **http://localhost:3000**, pick a persona, hit **ARM TARPIT**, and talk int
 | `ELEVENLABS_API_KEY` | streaming text-to-speech (the persona's voice) |
 | `OPENAI_API_KEY` | the persona brain + fraud classification |
 | `ELASTIC_CLOUD_ID` + `ELASTIC_API_KEY` | threat-intel index (optional — falls back to a local store) |
+| `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `PUBLIC_URL` | real inbound phone calls (optional) |
 
 Everything degrades gracefully. Missing Elastic → local JSONL in `data/`. Missing any
 voice key → the UI tells you which one, and the rest of the system still runs.
@@ -73,6 +74,96 @@ Two fallbacks, both exercising the identical pipeline:
   ElevenLabs and Elastic in one command.
 
 ---
+
+## Taking real calls
+
+The browser demo and the phone line run the **same session loop** — only the audio
+format differs, and the phone path stays mu-law 8kHz end to end so nothing is resampled
+in-process.
+
+```bash
+# 1. expose the server (either works)
+cloudflared tunnel --url http://localhost:8787
+ngrok http 8787
+
+# 2. put that https origin in .env
+PUBLIC_URL=https://your-tunnel.example.com
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_NUMBER=+1...
+
+# 3. point your Twilio number's Voice webhook at
+#    https://your-tunnel.example.com/twilio/voice   (HTTP POST)
+
+# 4. check it
+curl localhost:8787/api/twilio/status
+```
+
+Now anyone can dial the number and get Harold. The command center mirrors the live call —
+you don't have to start anything in the browser.
+
+Inbound requests are rejected unless they carry a valid `X-Twilio-Signature`. A tunnel is
+a public URL; without that check the number is an open telephony relay.
+
+## What you can and cannot learn about a caller
+
+**You cannot get a scammer's IP address from a phone call.** The audio arrives over the
+carrier network — there is no IP in the path. Any project claiming otherwise is either
+describing a VoIP-only edge case or is wrong, and it is the first thing a technical judge
+will probe.
+
+What the signalling *does* carry is better, because it's verifiable:
+
+| Signal | What it tells you |
+|---|---|
+| **STIR/SHAKEN attestation** | Whether the originating carrier cryptographically vouched for the caller ID. Grade **C**, `Failed`, or no attestation means the number is almost certainly spoofed. |
+| **Carrier + line type** | Who originates the traffic, and whether it's mobile, landline, or VoIP — scam floors run on VoIP. |
+| **CNAM** | The caller-ID name they paid to display, e.g. "IRS TAX DEPT". |
+| **Geographic origin** | City/state the number is registered to, against what they claim. |
+
+All of it is indexed as artifacts alongside whatever the scammer says out loud.
+
+## Reporting
+
+There is **no public API that files a complaint with the FBI, FTC or FCC** — those are
+human web forms, for everyone. So Tarpit doesn't fake a "REPORTED ✓" badge. It produces
+the three things that are actually actionable:
+
+```
+GET  /api/report/:id            case file (JSON)
+GET  /api/report/:id/stix       STIX 2.1 bundle
+GET  /api/report/:id/markdown   case file (Markdown)
+GET  /api/report/:id/ftc        field-by-field FTC pre-fill
+POST /api/report/:id/dispatch   POST the package to REPORT_WEBHOOK_URL
+```
+
+**STIX 2.1** is the format carriers, ISACs and bank fraud teams ingest by machine — it's
+where this intel realistically lands. Indicators carry the validation result and a
+confidence score derived from severity.
+
+The case file also does **cross-engagement correlation**: if a wallet or routing number
+shows up in more than one call, it's flagged. A reused payment channel is a live operation,
+not a one-off — that's the difference between a data point and intelligence.
+
+Every package carries an explicit AI-disclosure and a consent-law caveat, because the
+transcript is a recording and recording law varies by state.
+
+## Why it doesn't sound fake
+
+Synthetic voice reads as fake mostly for reasons that aren't the model:
+
+- **Band-limiting.** Real phone audio lives in 300–3400Hz. Studio-clean 24kHz speech is
+  the single biggest tell. Playback runs through a telephony chain — bandpass, soft-clip
+  for codec grit, heavy compression, and a low line-noise floor. Toggle it live with
+  **PHONE LINE** in the header to hear the difference.
+- **Room tone.** Harold says "let me turn the television down." If that lands over
+  digital silence, the ear catches it instantly. Each persona has a generated ambience
+  loop (`npm run ambience`) mixed in *before* the phone filter, because the caller hears
+  the room down the same line.
+- **Model choice.** `eleven_turbo_v2_5` over `flash_v2_5`: +116ms to first byte,
+  audibly better prosody. On a phone call that latency delta is invisible.
+- **Reply length.** Short turns. A monologue lets the scammer mute you; short replies
+  force them to keep talking, which is both more realistic and more time destroyed.
 
 ## How it works
 

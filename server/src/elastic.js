@@ -210,6 +210,61 @@ class Store {
     }
   }
 
+  /** Everything recorded for one engagement, for report generation. */
+  async sessionBundle(sessionId) {
+    const local = {
+      session: this.mem.sessions.get(sessionId) || null,
+      intel: this.mem.intel.filter((d) => d.session_id === sessionId),
+      utterances: this.mem.utterances.filter((d) => d.session_id === sessionId),
+    };
+    if (local.session && local.intel.length) return local;
+    if (!this.connected) return local;
+
+    // Memory is per-process; after a restart Elastic is the only record.
+    try {
+      const [sess, intel, utts] = await Promise.all([
+        this.client.get({ index: SESSION_INDEX, id: sessionId }).catch(() => null),
+        this.client.search({
+          index: INTEL_INDEX,
+          size: 500,
+          query: { term: { session_id: sessionId } },
+          sort: [{ '@timestamp': 'asc' }],
+        }),
+        this.client.search({
+          index: UTTERANCE_INDEX,
+          size: 1000,
+          query: { term: { session_id: sessionId } },
+          sort: [{ '@timestamp': 'asc' }],
+        }),
+      ]);
+      return {
+        session: sess?._source || local.session,
+        intel: intel.hits.hits.map((h) => h._source),
+        utterances: utts.hits.hits.map((h) => h._source),
+      };
+    } catch {
+      return local;
+    }
+  }
+
+  /** Every artifact value seen across all engagements, for cross-call correlation. */
+  async correlate(value) {
+    if (!this.connected) {
+      return this.mem.intel.filter((d) => String(d.value) === String(value));
+    }
+    try {
+      const res = await this.client.search({
+        index: INTEL_INDEX,
+        size: 100,
+        query: { term: { value } },
+        sort: [{ '@timestamp': 'desc' }],
+      });
+      return res.hits.hits.map((h) => h._source);
+    } catch {
+      return [];
+    }
+  }
+
   /** Full-text search across captured intel — the Elastic "find the signal" query path. */
   async search(q) {
     if (!this.connected) {

@@ -36,6 +36,7 @@ export function useTarpit() {
   const [muteWhileSpeaking, setMuteWhileSpeaking] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [lastIntelAt, setLastIntelAt] = useState(0);
+  const [telephony, setTelephony] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
   const engineRef = useRef<AudioEngine | null>(null);
@@ -111,6 +112,7 @@ export function useTarpit() {
         case 'session_start':
           setConn('live');
           setActivePersona(evt.persona);
+          engineRef.current?.setAmbience(evt.persona?.id ?? null);
           setTranscript([]);
           setIntel([]);
           setEnrichment(null);
@@ -119,10 +121,12 @@ export function useTarpit() {
         case 'session_end':
           setConn('ended');
           setAgentSpeaking(false);
+          engineRef.current?.stopAmbience();
           if (evt.enrichment) setEnrichment(evt.enrichment);
           break;
         case 'persona_changed':
           setActivePersona(evt.persona);
+          engineRef.current?.setAmbience(evt.persona?.id ?? null);
           break;
         case 'transcript_partial':
           setPartial(evt.text);
@@ -218,6 +222,14 @@ export function useTarpit() {
     [send]
   );
 
+  const toggleTelephony = useCallback(() => {
+    setTelephony((prev) => {
+      const next = !prev;
+      engineRef.current?.setTelephony(next);
+      return next;
+    });
+  }, []);
+
   const toggleMuteWhileSpeaking = useCallback(() => {
     const next = !muteWhileSpeaking;
     setMuteWhileSpeaking(next);
@@ -227,7 +239,7 @@ export function useTarpit() {
   return {
     conn, personas, activePersona, transcript, partial, agentLive, intel, metrics,
     enrichment, signals, agentSpeaking, inputLevel, outputLevel, health,
-    muteWhileSpeaking, errors, lastIntelAt,
-    start, stop, choosePersona, inject, toggleMuteWhileSpeaking,
+    muteWhileSpeaking, errors, lastIntelAt, telephony,
+    start, stop, choosePersona, inject, toggleMuteWhileSpeaking, toggleTelephony,
   };
 }

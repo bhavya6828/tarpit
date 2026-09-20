@@ -5,11 +5,21 @@
  * resampling. Playback runs in a separate 24kHz context matching ElevenLabs'
  * PCM output, so agent audio is scheduled sample-accurate with no decode step
  * and no seam between streamed chunks.
+ *
+ * Playback also runs through a telephony chain. Studio-clean 24kHz speech is
+ * the single biggest reason a synthetic voice reads as fake on a "phone call" —
+ * real phone audio is band-limited to roughly 300–3400Hz and heavily
+ * compressed. Room ambience is mixed in *before* that filter, because the
+ * scammer hears the persona's living room down the same line.
  */
 
 const CAPTURE_RATE = 16000;
 const PLAYBACK_RATE = 24000;
 const SCHEDULE_LEAD = 0.08; // seconds of cushion before the first chunk plays
+
+// Narrowband telephony passband.
+const PHONE_HIGHPASS = 300;
+const PHONE_LOWPASS = 3400;
 
 export interface AudioEngineHandlers {
   onPcm(pcm: ArrayBuffer): void;
@@ -23,9 +33,24 @@ export class AudioEngine {
   private playbackCtx: AudioContext | null = null;
   private stream: MediaStream | null = null;
   private node: AudioWorkletNode | null = null;
-  private outGain: GainNode | null = null;
-  private analyser: AnalyserNode | null = null;
   private levelRaf = 0;
+
+  // playback graph
+  private voiceGain: GainNode | null = null;
+  private ambGain: GainNode | null = null;
+  private hissGain: GainNode | null = null;
+  private highpass: BiquadFilterNode | null = null;
+  private lowpass: BiquadFilterNode | null = null;
+  private shaper: WaveShaperNode | null = null;
+  private comp: DynamicsCompressorNode | null = null;
+  private analyser: AnalyserNode | null = null;
+
+  private ambSource: AudioBufferSourceNode | null = null;
+  private hissSource: AudioBufferSourceNode | null = null;
+  private ambBuffers = new Map<string, AudioBuffer>();
+  private ambienceId: string | null = null;
+
+  private telephony = true;
 
   private sources = new Set<AudioBufferSourceNode>();
   private nextStart = 0;
@@ -37,6 +62,8 @@ export class AudioEngine {
   get micActive() {
     return !!this.stream;
   }
+
+  // ─── capture ──────────────────────────────────────────────────────────────
 
   async startMic() {
     if (this.stream) return;
@@ -80,21 +107,152 @@ export class AudioEngine {
     await this.captureCtx.resume();
   }
 
+  // ─── playback graph ───────────────────────────────────────────────────────
+
   async ensurePlayback() {
     if (this.playbackCtx) {
       if (this.playbackCtx.state === 'suspended') await this.playbackCtx.resume();
       return;
     }
-    this.playbackCtx = new AudioContext({ sampleRate: PLAYBACK_RATE });
-    this.outGain = this.playbackCtx.createGain();
-    this.analyser = this.playbackCtx.createAnalyser();
+
+    const ctx = new AudioContext({ sampleRate: PLAYBACK_RATE });
+    this.playbackCtx = ctx;
+
+    this.voiceGain = ctx.createGain();
+    this.ambGain = ctx.createGain();
+    this.hissGain = ctx.createGain();
+    this.voiceGain.gain.value = 1;
+    this.ambGain.gain.value = 0; // raised only while a call is live
+    this.hissGain.gain.value = 0;
+
+    this.highpass = ctx.createBiquadFilter();
+    this.highpass.type = 'highpass';
+    this.lowpass = ctx.createBiquadFilter();
+    this.lowpass.type = 'lowpass';
+
+    // Mild soft-clip: the grit a lossy voice codec leaves on consonants.
+    this.shaper = ctx.createWaveShaper();
+    this.shaper.curve = softClipCurve(1.7);
+    this.shaper.oversample = '2x';
+
+    // Phone lines are aggressively levelled; this is what flattens the dynamics
+    // into that familiar "someone talking into a handset" sound.
+    this.comp = ctx.createDynamicsCompressor();
+    this.comp.threshold.value = -28;
+    this.comp.knee.value = 6;
+    this.comp.ratio.value = 6;
+    this.comp.attack.value = 0.003;
+    this.comp.release.value = 0.12;
+
+    this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 512;
-    this.outGain.connect(this.analyser).connect(this.playbackCtx.destination);
-    await this.playbackCtx.resume();
-    this.#pumpOutputLevel();
+
+    // Everything the caller hears goes through the same line.
+    this.voiceGain.connect(this.highpass);
+    this.ambGain.connect(this.highpass);
+    this.hissGain.connect(this.highpass);
+    this.highpass.connect(this.lowpass).connect(this.shaper).connect(this.comp);
+    this.comp.connect(this.analyser).connect(ctx.destination);
+
+    this.applyTelephony(this.telephony);
+    this.startHiss();
+
+    await ctx.resume();
+    this.pumpOutputLevel();
   }
 
-  #pumpOutputLevel() {
+  /** Toggle the phone-line coloration. Off = raw studio audio. */
+  setTelephony(on: boolean) {
+    this.telephony = on;
+    this.applyTelephony(on);
+  }
+
+  private applyTelephony(on: boolean) {
+    if (!this.highpass || !this.lowpass || !this.shaper || !this.comp || !this.hissGain) return;
+    const ctx = this.playbackCtx!;
+    const t = ctx.currentTime;
+
+    // Rather than rewiring the graph, widen the filters to transparency.
+    this.highpass.frequency.setTargetAtTime(on ? PHONE_HIGHPASS : 20, t, 0.02);
+    this.lowpass.frequency.setTargetAtTime(on ? PHONE_LOWPASS : 20000, t, 0.02);
+    this.shaper.curve = on ? softClipCurve(1.7) : softClipCurve(0.001);
+    this.comp.ratio.setTargetAtTime(on ? 6 : 1, t, 0.02);
+    this.hissGain.gain.setTargetAtTime(on ? 0.006 : 0, t, 0.05);
+  }
+
+  /** Low-level line hiss so the gaps between words are never digitally dead. */
+  private startHiss() {
+    const ctx = this.playbackCtx;
+    if (!ctx || !this.hissGain || this.hissSource) return;
+
+    const buf = ctx.createBuffer(1, PLAYBACK_RATE * 2, PLAYBACK_RATE);
+    const ch = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < ch.length; i++) {
+      // Brown-ish noise reads as line noise; white noise reads as a broken mic.
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      ch[i] = last * 3.5;
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(this.hissGain);
+    src.start();
+    this.hissSource = src;
+  }
+
+  // ─── ambience ─────────────────────────────────────────────────────────────
+
+  /** Load and loop the room this persona is sitting in. */
+  async setAmbience(personaId: string | null) {
+    const ctx = this.playbackCtx;
+    if (!ctx || !this.ambGain) return;
+    if (personaId === this.ambienceId) return;
+
+    this.ambienceId = personaId;
+    this.stopAmbience();
+    if (!personaId) return;
+
+    let buf = this.ambBuffers.get(personaId);
+    if (!buf) {
+      try {
+        const res = await fetch(`/ambience/${personaId}.mp3`);
+        if (!res.ok) return;
+        buf = await ctx.decodeAudioData(await res.arrayBuffer());
+        this.ambBuffers.set(personaId, buf);
+      } catch {
+        return; // ambience is a nicety; never let it break the call
+      }
+    }
+    if (this.ambienceId !== personaId) return; // persona changed while loading
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(this.ambGain);
+    src.start();
+    this.ambSource = src;
+
+    // Sit well under the voice — present, never distracting.
+    this.ambGain.gain.setTargetAtTime(0.075, ctx.currentTime, 0.6);
+  }
+
+  stopAmbience() {
+    const ctx = this.playbackCtx;
+    if (this.ambGain && ctx) this.ambGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+    const src = this.ambSource;
+    this.ambSource = null;
+    if (src) {
+      try {
+        src.stop(ctx ? ctx.currentTime + 0.5 : 0);
+      } catch {}
+    }
+  }
+
+  // ─── level metering ───────────────────────────────────────────────────────
+
+  private pumpOutputLevel() {
     const buf = new Uint8Array(this.analyser!.frequencyBinCount);
     const tick = () => {
       if (!this.analyser) return;
@@ -110,10 +268,12 @@ export class AudioEngine {
     tick();
   }
 
+  // ─── streamed voice playback ──────────────────────────────────────────────
+
   /** Queue one streamed PCM16 chunk belonging to `turnId`. */
   enqueue(turnId: number, pcm: ArrayBuffer) {
     const ctx = this.playbackCtx;
-    if (!ctx || !this.outGain) return;
+    if (!ctx || !this.voiceGain) return;
 
     if (turnId !== this.playingTurn) {
       this.playingTurn = turnId;
@@ -130,7 +290,7 @@ export class AudioEngine {
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.outGain);
+    source.connect(this.voiceGain);
 
     const startAt = Math.max(this.nextStart, ctx.currentTime + 0.01);
     source.start(startAt);
@@ -164,17 +324,35 @@ export class AudioEngine {
 
   async stop() {
     this.flush();
+    this.stopAmbience();
     cancelAnimationFrame(this.levelRaf);
     this.node?.port.close();
     this.node?.disconnect();
     this.node = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    try {
+      this.hissSource?.stop();
+    } catch {}
+    this.hissSource = null;
     await this.captureCtx?.close().catch(() => {});
     this.captureCtx = null;
     await this.playbackCtx?.close().catch(() => {});
     this.playbackCtx = null;
     this.analyser = null;
-    this.outGain = null;
+    this.voiceGain = null;
+    this.ambGain = null;
+    this.ambienceId = null;
   }
+}
+
+function softClipCurve(drive: number) {
+  const n = 1024;
+  const curve = new Float32Array(n);
+  const d = Math.max(0.001, drive);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * d) / Math.tanh(d);
+  }
+  return curve;
 }

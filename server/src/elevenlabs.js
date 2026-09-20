@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { config } from './config.js';
+import { config, TRANSPORTS } from './config.js';
 
 /**
  * ElevenLabs streaming TTS over the input-streaming websocket.
@@ -13,7 +13,8 @@ import { config } from './config.js';
  * Audio with no decode step and no seam between chunks.
  */
 export class ElevenLabsStream {
-  constructor({ voiceId, voiceSettings, onAudio, onDone, onError }) {
+  constructor({ voiceId, voiceSettings, onAudio, onDone, onError, transport = 'browser' }) {
+    this.outputFormat = (TRANSPORTS[transport] || TRANSPORTS.browser).tts.outputFormat;
     this.voiceId = voiceId;
     this.voiceSettings = voiceSettings || { stability: 0.45, similarity_boost: 0.75 };
     this.onAudio = onAudio || (() => {});
@@ -30,7 +31,7 @@ export class ElevenLabsStream {
   connect() {
     const params = new URLSearchParams({
       model_id: config.elevenlabs.model,
-      output_format: config.elevenlabs.outputFormat,
+      output_format: this.outputFormat,
       // auto_mode lets ElevenLabs decide generation boundaries from punctuation,
       // which beats a fixed chunk schedule for conversational speech.
       auto_mode: 'true',
@@ -119,10 +120,11 @@ export class ElevenLabsStream {
 }
 
 /** Non-streaming helper for one-shot lines (session openers, pre-roll fillers). */
-export async function synthesizeOnce(voiceId, text, voiceSettings) {
+export async function synthesizeOnce(voiceId, text, voiceSettings, transport = 'browser') {
+  const fmt = (TRANSPORTS[transport] || TRANSPORTS.browser).tts.outputFormat;
   const url =
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream` +
-    `?output_format=${config.elevenlabs.outputFormat}`;
+    `?output_format=${fmt}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {

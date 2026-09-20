@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { config } from './config.js';
+import { config, TRANSPORTS } from './config.js';
 
 /**
  * Deepgram streaming STT.
@@ -12,7 +12,8 @@ import { config } from './config.js';
  *                     intel extractor needs to checksum card/routing numbers
  */
 export class DeepgramStream {
-  constructor({ onTranscript, onSpeechStarted, onUtteranceEnd, onError, onOpen }) {
+  constructor({ onTranscript, onSpeechStarted, onUtteranceEnd, onError, onOpen, transport = 'browser' }) {
+    this.audio = (TRANSPORTS[transport] || TRANSPORTS.browser).stt;
     this.onTranscript = onTranscript || (() => {});
     this.onSpeechStarted = onSpeechStarted || (() => {});
     this.onUtteranceEnd = onUtteranceEnd || (() => {});
@@ -29,8 +30,8 @@ export class DeepgramStream {
     const params = new URLSearchParams({
       model: config.deepgram.model,
       language: 'en-US',
-      encoding: 'linear16',
-      sample_rate: String(config.inputSampleRate),
+      encoding: this.audio.encoding,
+      sample_rate: String(this.audio.sampleRate),
       channels: '1',
       interim_results: 'true',
       utterance_end_ms: '1000',
@@ -97,7 +98,7 @@ export class DeepgramStream {
     return this;
   }
 
-  /** @param {Buffer} pcm16 mono little-endian PCM at config.inputSampleRate */
+  /** @param {Buffer} pcm16 mono audio in this transport's encoding */
   send(pcm16) {
     if (this.closed) return;
     if (this.ready && this.ws?.readyState === WebSocket.OPEN) {

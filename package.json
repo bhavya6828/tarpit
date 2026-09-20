@@ -11,7 +11,8 @@
     "install:all": "npm install && npm --prefix server install && npm --prefix web install",
     "build": "npm --prefix web run build",
     "start": "concurrently -n SERVER,WEB -c magenta,cyan \"node --env-file=.env server/index.js\" \"npm --prefix web run start\"",
-    "simulate": "node --env-file=.env scripts/simulate-call.mjs"
+    "simulate": "node --env-file=.env scripts/simulate-call.mjs",
+    "ambience": "node --env-file=.env scripts/generate-ambience.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
