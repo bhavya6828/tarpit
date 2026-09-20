@@ -406,6 +406,11 @@ It is the UI's type-to-talk box and the demo's mic-failure fallback.
 with its validation result, full transcript, cross-engagement correlation, and
 disclosure block.
 
+Payment cards, routing numbers, and bank account numbers are masked to their last
+four digits in every exported artifact, transcript excerpt, and transcript line.
+JSON, Markdown, STIX, FTC pre-fill, and webhook dispatch all derive from this same
+redacted case file.
+
 **STIX 2.1 bundle**, `identity` + one `indicator` per artifact + a `report` linking
 them. Patterns use standard SCOs where they exist (`email-addr`, `domain-name`,
 `ipv4-addr`) and `x-` custom objects where STIX has no native type (crypto wallets,
