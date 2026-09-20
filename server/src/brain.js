@@ -63,6 +63,37 @@ export function backchannelDue(state, now) {
   return true;
 }
 
+/**
+ * How many of the persona's most recent turns in a row were stalls.
+ *
+ * Optimizing purely for delay produced a persona that reached for an obstacle
+ * every single turn. Nobody behaves that way, and a caller hangs up on someone
+ * who obviously will not get to the point, so a run of them is worth breaking.
+ */
+export function consecutiveStalls(persona, history) {
+  const patterns = Object.values(persona?.obstacles || {});
+  if (!patterns.length) return 0;
+
+  const spoken = (history || []).filter((m) => m.role === 'assistant' && String(m.content || '').trim());
+
+  let run = 0;
+  for (let i = spoken.length - 1; i >= 0; i--) {
+    const text = String(spoken[i].content);
+    if (patterns.some((p) => p.test(text))) run++;
+    else break;
+  }
+  return run;
+}
+
+const BE_A_PERSON = `
+You have leaned on an excuse two turns running. Stop. This turn, just respond
+like an ordinary person would: answer what he asked, react to it, or ask him
+something a real person would ask. No hunting for glasses, no cat, no wallet,
+nothing knocked off a table. You are allowed to be briefly clear-headed, and
+you are allowed to be a little impatient. Confusion every second of a call is
+a performance, and he can hear it.
+`.trim();
+
 /** Which of this persona's stock excuses have already been used aloud. */
 export function spentObstacles(persona, history) {
   const said = (history || [])
@@ -188,6 +219,10 @@ export async function* streamPersonaReply({
   // What it already knows, before what it should avoid saying. Facts first.
   const state = describeCallState({ persona, history, intel, enrichment, elapsedSeconds, turnCount });
   if (state) messages.push({ role: 'system', content: state });
+
+  if (consecutiveStalls(persona, history) >= 2) {
+    messages.push({ role: 'system', content: BE_A_PERSON });
+  }
 
   const openers = recentOpeners(history);
   if (openers.length) {
