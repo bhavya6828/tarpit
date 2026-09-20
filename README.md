@@ -18,7 +18,7 @@ It extracts and validates payment details, then stores threat intelligence from 
 ## Pipeline
 
 Caller audio flows through Deepgram speech-to-text, turn detection, and a GPT-4o persona.
-GPT-4o streams replies to ElevenLabs text-to-speech while the extractor validates artifacts and saves them to Elasticsearch or local JSONL.
+GPT-4o hands each reply to ElevenLabs text-to-speech while the extractor validates artifacts and saves them to Elasticsearch or local JSONL.
 
 ## Test locally
 
@@ -29,5 +29,25 @@ On PowerShell, use `npm.cmd run install:all`, `Copy-Item .env.example .env`, and
 
 For a microphone-free test, keep the app running and run `npm run simulate` in another terminal.
 Elastic keys are optional because the app falls back to local JSONL storage.
+
+## Take real calls
+
+Expose the server with `cloudflared tunnel --url http://localhost:8787` and copy the
+`https://` origin it prints into `PUBLIC_URL`.
+Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_NUMBER`, then point the
+number's Voice webhook at `<PUBLIC_URL>/twilio/voice` using HTTP POST.
+
+Check it with `curl localhost:8787/api/twilio/status`, which reports the webhook URL
+it expects.
+Quick tunnels get a new hostname on every restart, so if cloudflared drops you must
+update `PUBLIC_URL` and the Twilio webhook again.
+
+## Settings worth knowing
+
+`.env.example` lists every supported key with blank values.
+Anything left blank falls back to a working default.
+
+`TTS_GRANULARITY` takes `reply` (default, best prosody) or `clause` (lower latency).
+`TWILIO_PERSONA` takes `harold`, `dale`, `kevin`, or `brenda`.
 
 Built by Max Gong, Kate Kaneshiro, Bhavya Wadhwa, and Hong Cheng Wang.
