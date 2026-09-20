@@ -406,6 +406,16 @@ Server → client, JSON events plus binary audio framed as
 `inject` feeds text as though the caller had spoken it, same pipeline, no microphone.
 It is the UI's type-to-talk box and the demo's mic-failure fallback.
 
+The command WebSocket and report dispatch route use local-only access when
+`TARPIT_ACCESS_TOKEN` is blank. Remote clients are rejected. When a token is set,
+the server accepts it through `X-Tarpit-Token`, a bearer header, or the WebSocket
+`token` query parameter. The browser uses `NEXT_PUBLIC_TARPIT_TOKEN`. This is a
+small demo access boundary, not production user authentication.
+
+The process allows four concurrent sessions by default. Each session ends after
+30 minutes by default. External provider HTTP calls and WebSocket handshakes time
+out after five seconds by default.
+
 ---
 
 ## 11. Referral packages
@@ -520,6 +530,10 @@ scammer's time, not more.
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `TARPIT_ACCESS_TOKEN` |, | remote command and dispatch access |
+| `MAX_CONCURRENT_SESSIONS` | `4` | process session cap |
+| `MAX_SESSION_MINUTES` | `30` | automatic session stop |
+| `PROVIDER_TIMEOUT_MS` | `5000` | provider request and handshake timeout |
 | `DEEPGRAM_API_KEY` |, | required |
 | `DEEPGRAM_MODEL` | `nova-3` | |
 | `ELEVENLABS_API_KEY` |, | required |
@@ -535,6 +549,8 @@ scammer's time, not more.
 | `SCAMMER_COST_PER_MINUTE` | `0.42` | metrics |
 | `AVG_SCAM_CALL_SECONDS` | `270` | metrics |
 | `VOICE_HAROLD` / `_DALE` / `_KEVIN` / `_BRENDA` | preset ids | voice override |
+| `NEXT_PUBLIC_TARPIT_SERVER` | `localhost:8787` | browser server host |
+| `NEXT_PUBLIC_TARPIT_TOKEN` |, | browser copy of demo access token |
 
 ---
 

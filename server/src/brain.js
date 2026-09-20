@@ -2,7 +2,9 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { TACTICS } from './personas.js';
 
-export const openai = config.openai.key ? new OpenAI({ apiKey: config.openai.key }) : null;
+export const openai = config.openai.key
+  ? new OpenAI({ apiKey: config.openai.key, timeout: config.security.providerTimeoutMs })
+  : null;
 
 const AUDIO_TAG_DIRECTION = `
 VOICE DIRECTION: your line is spoken by an engine that acts on emotional cues

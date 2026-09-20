@@ -39,7 +39,10 @@ export class ElevenLabsStream {
     });
 
     const url = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?${params}`;
-    this.ws = new WebSocket(url, { headers: { 'xi-api-key': config.elevenlabs.key } });
+    this.ws = new WebSocket(url, {
+      headers: { 'xi-api-key': config.elevenlabs.key },
+      handshakeTimeout: config.security.providerTimeoutMs,
+    });
 
     this.ws.on('open', () => {
       this.ws.send(
@@ -127,6 +130,7 @@ export async function synthesizeOnce(voiceId, text, voiceSettings, transport = '
     `?output_format=${fmt}`;
   const res = await fetch(url, {
     method: 'POST',
+    signal: AbortSignal.timeout(config.security.providerTimeoutMs),
     headers: {
       'xi-api-key': config.elevenlabs.key,
       'Content-Type': 'application/json',

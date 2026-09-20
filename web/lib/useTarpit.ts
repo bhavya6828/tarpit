@@ -5,8 +5,9 @@ import { AudioEngine } from './audio';
 import type { ConnState, Enrichment, IntelItem, Metrics, PersonaCard, TranscriptLine } from './types';
 
 const SERVER = process.env.NEXT_PUBLIC_TARPIT_SERVER || 'localhost:8787';
+const ACCESS_TOKEN = process.env.NEXT_PUBLIC_TARPIT_TOKEN || '';
 const HTTP = `http://${SERVER}`;
-const WS_URL = `ws://${SERVER}/ws`;
+const WS_URL = `ws://${SERVER}/ws${ACCESS_TOKEN ? `?token=${encodeURIComponent(ACCESS_TOKEN)}` : ''}`;
 
 let lineSeq = 0;
 const nextId = () => `l${++lineSeq}`;

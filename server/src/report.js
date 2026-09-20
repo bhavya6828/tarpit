@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { config } from './config.js';
 import { store } from './elastic.js';
 import { getPersona } from './personas.js';
 import { redactIntelItem, redactPaymentText } from './redact.js';
@@ -298,6 +299,7 @@ export async function dispatch(caseFile, url) {
   try {
     const res = await fetch(url, {
       method: 'POST',
+      signal: AbortSignal.timeout(config.security.providerTimeoutMs),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ case_file: caseFile, stix: toStixBundle(caseFile) }),
     });

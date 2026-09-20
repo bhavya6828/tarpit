@@ -44,7 +44,10 @@ export class DeepgramStream {
     });
 
     const url = `wss://api.deepgram.com/v1/listen?${params}`;
-    this.ws = new WebSocket(url, { headers: { Authorization: `Token ${config.deepgram.key}` } });
+    this.ws = new WebSocket(url, {
+      headers: { Authorization: `Token ${config.deepgram.key}` },
+      handshakeTimeout: config.security.providerTimeoutMs,
+    });
 
     this.ws.on('open', () => {
       this.ready = true;

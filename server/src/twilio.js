@@ -99,6 +99,7 @@ export async function lookupNumber(e164) {
 
   try {
     const res = await fetch(url, {
+      signal: AbortSignal.timeout(config.security.providerTimeoutMs),
       headers: { Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}` },
     });
     if (!res.ok) return {};
@@ -209,6 +210,10 @@ export function attachMediaStream(ws, { pendingCalls, makeSession, onEvent }) {
 
         const personaId = msg.start?.customParameters?.persona || config.twilio.personaId;
         session = makeSession({ personaId, transport: 'twilio', caller });
+        if (!session) {
+          await teardown('capacity_reached');
+          return;
+        }
         session.on('event', onSessionEvent);
         session.on('audio', onAudio);
         await session.start();

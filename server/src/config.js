@@ -3,6 +3,13 @@ const num = (v, d) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? 
 export const config = {
   port: num(process.env.PORT, 8787),
 
+  security: {
+    accessToken: process.env.TARPIT_ACCESS_TOKEN || '',
+    maxConcurrentSessions: Math.max(1, Math.floor(num(process.env.MAX_CONCURRENT_SESSIONS, 4))),
+    maxSessionMs: Math.max(1, Math.ceil(num(process.env.MAX_SESSION_MINUTES, 30) * 60_000)),
+    providerTimeoutMs: Math.max(1, Math.floor(num(process.env.PROVIDER_TIMEOUT_MS, 5000))),
+  },
+
   deepgram: {
     key: process.env.DEEPGRAM_API_KEY || '',
     model: process.env.DEEPGRAM_MODEL || 'nova-3',

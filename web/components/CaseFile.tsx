@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Pill } from './ui';
 
+const ACCESS_TOKEN = process.env.NEXT_PUBLIC_TARPIT_TOKEN || '';
+
 interface CaseFileData {
   case_id: string;
   generated_at: string;
@@ -49,7 +51,10 @@ export default function CaseFile({
   const dispatchReport = async () => {
     setDispatched('sending…');
     try {
-      const r = await fetch(`${serverBase}/api/report/${sessionId}/dispatch`, { method: 'POST' });
+      const r = await fetch(`${serverBase}/api/report/${sessionId}/dispatch`, {
+        method: 'POST',
+        headers: ACCESS_TOKEN ? { 'X-Tarpit-Token': ACCESS_TOKEN } : {},
+      });
       const j = await r.json();
       setDispatched(j.dispatched ? `delivered (HTTP ${j.status})` : `not sent — ${j.reason}`);
     } catch (e) {

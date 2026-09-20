@@ -9,8 +9,10 @@ import { Session } from './src/session.js';
 import { personaSummaries } from './src/personas.js';
 import { inboundTwiml, validateSignature, buildCallerProfile, attachMediaStream } from './src/twilio.js';
 import { buildCaseFile, toStixBundle, toFtcComplaint, toMarkdown, dispatch } from './src/report.js';
+import { requestAuthorized, SessionGate } from './src/security.js';
 
 const app = express();
+const sessionGate = new SessionGate(config.security.maxConcurrentSessions);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // Twilio posts form-encoded
@@ -34,6 +36,12 @@ app.get('/api/health', async (req, res) => {
       llm: config.openai.model,
     },
     economics: config.economics,
+    security: {
+      mode: config.security.accessToken ? 'token' : 'local-only',
+      activeSessions: sessionGate.size,
+      maxConcurrentSessions: config.security.maxConcurrentSessions,
+      maxSessionMinutes: config.security.maxSessionMs / 60_000,
+    },
   });
 });
 
@@ -53,6 +61,11 @@ async function caseOr404(req, res) {
     return null;
   }
   return file;
+}
+
+function requireAccess(req, res, next) {
+  if (requestAuthorized(req, config.security.accessToken)) return next();
+  return res.status(401).json({ error: 'unauthorized' });
 }
 
 app.get('/api/report/:sessionId', async (req, res) => {
@@ -77,7 +90,7 @@ app.get('/api/report/:sessionId/markdown', async (req, res) => {
   res.type('text/markdown').set('Content-Disposition', `attachment; filename="${file.case_id}.md"`).send(toMarkdown(file));
 });
 
-app.post('/api/report/:sessionId/dispatch', async (req, res) => {
+app.post('/api/report/:sessionId/dispatch', requireAccess, async (req, res) => {
   const file = await caseOr404(req, res);
   if (!file) return;
   const result = await dispatch(file, process.env.REPORT_WEBHOOK_URL);
@@ -145,9 +158,26 @@ const broadcast = (evt) => {
   }
 };
 
+const makeSession = (options) => {
+  const session = new Session(options);
+  if (!sessionGate.tryAdd(session)) return null;
+  const release = (event) => {
+    if (event.type !== 'session_end') return;
+    sessionGate.delete(session);
+    session.removeListener('event', release);
+  };
+  session.on('event', release);
+  return session;
+};
+
 server.on('upgrade', (req, socket, head) => {
   const { pathname } = new URL(req.url, 'http://localhost');
   if (pathname === '/ws') {
+    if (!requestAuthorized(req, config.security.accessToken)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   } else if (pathname === '/twilio') {
     twilioWss.handleUpgrade(req, socket, head, (ws) => twilioWss.emit('connection', ws, req));
@@ -160,7 +190,7 @@ twilioWss.on('connection', (ws) => {
   console.log('[twilio] media stream connected');
   attachMediaStream(ws, {
     pendingCalls,
-    makeSession: (opts) => new Session(opts),
+    makeSession,
     // Mirror the live call into every open command center.
     onEvent: (evt) => broadcast({ ...evt, source: 'phone' }),
   });
@@ -219,7 +249,11 @@ wss.on('connection', (ws) => {
           await session.stop('restarted');
           detach(session);
         }
-        session = new Session({ personaId: msg.personaId });
+        session = makeSession({ personaId: msg.personaId });
+        if (!session) {
+          sendEvent({ type: 'error', scope: 'session', message: 'session capacity reached' });
+          break;
+        }
         attach(session);
         await session.start();
         break;
