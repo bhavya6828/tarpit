@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { DeepgramStream } from './deepgram.js';
-import { ElevenLabsStream } from './elevenlabs.js';
+import { ElevenLabsStream, createVoice } from './elevenlabs.js';
 import { openai, streamPersonaReply, pick, stripAudioTags, chunkForSpeech } from './brain.js';
 import { getPersona, DEFAULT_PERSONA } from './personas.js';
 import { extractIntel, detectSignals, enrichIntel } from './intel.js';
@@ -26,7 +26,7 @@ const DEFAULT_DEPENDENCIES = {
   store,
   openaiAvailable: Boolean(openai),
   createDeepgram: (options) => new DeepgramStream(options).connect(),
-  createTTS: (options) => new ElevenLabsStream(options),
+  createTTS: (options) => createVoice(options),
   streamReply: streamPersonaReply,
   enrich: (model, transcript) => enrichIntel(openai, model, transcript),
   pick,
@@ -343,7 +343,9 @@ export class Session extends EventEmitter {
       onError: (e) => this.emit('event', { type: 'error', scope: 'elevenlabs', message: e.message }),
     });
     this.tts = tts;
-    tts.connect();
+    // The websocket client connects itself through the factory; the HTTP client
+    // has nothing to connect. Older injected doubles may still expose connect().
+    if (typeof tts.connect === 'function' && !tts.immediate) tts.connect();
 
     // The UI streams tokens as they arrive; the voice engine does not. Those are
     // separate concerns: live text keeps the operator informed, while the engine
@@ -355,11 +357,14 @@ export class Session extends EventEmitter {
       this.emit('event', { type: 'agent_delta', turnId, text: stripAudioTags(chunk) || chunk.replace(/\[[^\]]*\]/g, '') });
     };
 
-    // The filler is spoken immediately either way. It is what buys the time the
-    // rest of the reply takes to arrive.
+    // The filler is what buys the time the rest of the reply takes to arrive, so
+    // it must not wait on anything. The websocket client starts generating the
+    // moment it is pushed. The HTTP client cannot send until the reply is
+    // complete, so it speaks the filler as its own cached request instead.
     if (text) {
       show(`${text} `);
-      tts.push(`${text} `);
+      if (typeof tts.speakNow === 'function') await tts.speakNow(text);
+      else tts.push(`${text} `);
     }
 
     if (prefixOf) {
@@ -377,7 +382,7 @@ export class Session extends EventEmitter {
       }
     }
 
-    tts.end();
+    await tts.end();
 
     // Emotional direction belongs in the audio, not in the record.
     const finalText = stripAudioTags(full);
