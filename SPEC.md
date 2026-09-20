@@ -225,6 +225,29 @@ live signals, rather than one frozen prompt running to completion.
 Trimmed to `MAX_HISTORY_TURNS = 24`, always preserving the opening exchange so
 narrative continuity survives a long call.
 
+### 5.6 Call state
+
+Raw turns are a poor memory. A model given only a transcript improvises a plausible
+next line rather than tracking what has happened, which reads as reciting a script: it
+asks again for a number it already has, reuses an excuse it already spent, and answers
+around the question instead of answering it.
+
+Everything needed to fix that is already in the session, and is injected each turn as a
+compact set of facts:
+
+| Fact | Source |
+|---|---|
+| Who the caller claims to be | enrichment `claimed_org`, `claimed_name`, impersonation artifacts |
+| What they are demanding, and how much | enrichment `payment_rail`, `amount_demanded` |
+| Payment destinations already obtained | captured artifacts |
+| Excuses already spent | persona obstacle vocabulary matched against its own turns |
+| How long they have been held | elapsed seconds and turn count |
+
+Spent excuses are matched deterministically against a vocabulary each persona declares,
+so it costs nothing per turn and cannot invent an obstacle that was never used. Knowing
+a routing number is already captured is what lets the agent stop asking and start
+stalling on something else, which is the behavior that reads as understanding.
+
 ---
 
 ## 6. Personas
