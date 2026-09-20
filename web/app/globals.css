@@ -197,7 +197,7 @@ input:focus-visible {
   background: var(--color-faint);
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   body {
     overflow: hidden;
   }

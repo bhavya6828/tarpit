@@ -93,7 +93,7 @@ export default function IntelPanel({
             <Pill tone="info">{intel.length} total</Pill>
           </div>
         }
-        className="min-h-[360px] flex-1 lg:min-h-0"
+        className="min-h-[360px] flex-1 xl:min-h-0"
         bodyClass="min-h-0 overflow-y-auto"
       >
         {intel.length === 0 ? (

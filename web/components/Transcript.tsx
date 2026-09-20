@@ -40,7 +40,7 @@ export default function Transcript({
     <Panel
       title="Conversation"
       right={<Pill tone={live ? 'phos' : 'dim'}>{live ? 'Live transcript' : 'Standing by'}</Pill>}
-      className="min-h-[620px] flex-1 lg:min-h-0"
+      className="min-h-[620px] flex-1 xl:min-h-0"
       bodyClass="flex min-h-0 flex-col"
     >
       <div

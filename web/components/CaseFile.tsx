@@ -31,6 +31,14 @@ export default function CaseFile({
   const [error, setError] = useState<string | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const mounted = useRef(true);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    return () => previousFocusRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -92,6 +100,7 @@ export default function CaseFile({
             </h2>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label="Close referral package"

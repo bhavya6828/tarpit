@@ -15,6 +15,7 @@ const PAGE_PROTOCOL = typeof window === 'undefined' ? 'http:' : window.location.
 const HTTP = resolveServerUrls(SERVER, PAGE_PROTOCOL).http;
 
 type WorkspaceView = 'conversation' | 'evidence' | 'session';
+const workspaceViews: WorkspaceView[] = ['conversation', 'evidence', 'session'];
 
 export default function CommandCenter() {
   const tarpit = useTarpit();
@@ -32,8 +33,22 @@ export default function CommandCenter() {
     tarpit.choosePersona(id);
   };
 
+  const moveWorkspaceFocus = (event: React.KeyboardEvent<HTMLElement>) => {
+    const currentIndex = workspaceViews.indexOf(workspaceView);
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % workspaceViews.length;
+    if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + workspaceViews.length) % workspaceViews.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = workspaceViews.length - 1;
+    if (nextIndex === currentIndex) return;
+    event.preventDefault();
+    const nextView = workspaceViews[nextIndex];
+    setWorkspaceView(nextView);
+    document.getElementById(`${nextView}-tab`)?.focus();
+  };
+
   return (
-    <main className="workspace-shell min-h-screen bg-canvas lg:h-screen lg:min-h-0">
+    <main className="workspace-shell min-h-screen bg-canvas xl:h-screen xl:min-h-0">
       {showCase && tarpit.metrics?.sessionId && (
         <CaseFile
           sessionId={tarpit.metrics.sessionId}
@@ -42,7 +57,7 @@ export default function CommandCenter() {
         />
       )}
 
-      <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col px-3 py-3 sm:px-5 sm:py-4 lg:h-screen lg:min-h-0 lg:px-6">
+      <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col px-4 py-4 sm:px-5 xl:h-screen xl:min-h-0 xl:px-6">
         <header className="flex shrink-0 flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 items-center gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent font-serif text-lg text-white">
@@ -92,14 +107,19 @@ export default function CommandCenter() {
           </div>
         )}
 
-        <nav aria-label="Workspace views" className="mt-3 grid shrink-0 grid-cols-3 rounded-lg border border-border bg-surface p-1 lg:hidden">
-          <MobileTab active={workspaceView === 'conversation'} onClick={() => setWorkspaceView('conversation')}>Conversation</MobileTab>
-          <MobileTab active={workspaceView === 'evidence'} onClick={() => setWorkspaceView('evidence')}>Evidence</MobileTab>
-          <MobileTab active={workspaceView === 'session'} onClick={() => setWorkspaceView('session')}>Session</MobileTab>
+        <nav role="tablist" aria-label="Workspace views" onKeyDown={moveWorkspaceFocus} className="mt-4 grid shrink-0 grid-cols-3 rounded-lg border border-border bg-surface p-1 xl:hidden">
+          <MobileTab id="conversation-tab" controls="conversation-panel" active={workspaceView === 'conversation'} onClick={() => setWorkspaceView('conversation')}>Conversation</MobileTab>
+          <MobileTab id="evidence-tab" controls="evidence-panel" active={workspaceView === 'evidence'} onClick={() => setWorkspaceView('evidence')}>Evidence</MobileTab>
+          <MobileTab id="session-tab" controls="session-panel" active={workspaceView === 'session'} onClick={() => setWorkspaceView('session')}>Session</MobileTab>
         </nav>
 
-        <div className="mt-3 grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_minmax(420px,1fr)_340px]">
-          <aside className={`${workspaceView === 'session' ? 'flex' : 'hidden'} min-h-0 flex-col gap-3 overflow-y-auto pb-4 lg:flex lg:pb-0`} aria-label="Session">
+        <div className="mt-4 grid min-h-0 flex-1 gap-4 xl:grid-cols-[280px_minmax(420px,1fr)_340px]">
+          <aside
+            id="session-panel"
+            role="tabpanel"
+            aria-labelledby="session-tab"
+            className={`${workspaceView === 'session' ? 'flex' : 'hidden'} min-h-0 flex-col gap-4 overflow-y-auto pb-4 xl:flex xl:pb-0`}
+          >
             <Panel title="Session setup" bodyClass="space-y-5 p-4">
               <div>
                 <p className="label mb-2">Persona</p>
@@ -150,7 +170,12 @@ export default function CommandCenter() {
             />
           </aside>
 
-          <section className={`${workspaceView === 'conversation' ? 'flex' : 'hidden'} min-h-0 flex-col lg:flex`} aria-label="Conversation">
+          <section
+            id="conversation-panel"
+            role="tabpanel"
+            aria-labelledby="conversation-tab"
+            className={`${workspaceView === 'conversation' ? 'flex' : 'hidden'} min-h-0 flex-col xl:flex`}
+          >
             <Transcript
               lines={tarpit.transcript}
               partial={tarpit.partial}
@@ -161,12 +186,17 @@ export default function CommandCenter() {
             />
           </section>
 
-          <aside className={`${workspaceView === 'evidence' ? 'flex' : 'hidden'} min-h-0 flex-col overflow-y-auto pb-4 lg:flex lg:pb-0`} aria-label="Evidence">
+          <aside
+            id="evidence-panel"
+            role="tabpanel"
+            aria-labelledby="evidence-tab"
+            className={`${workspaceView === 'evidence' ? 'flex' : 'hidden'} min-h-0 flex-col overflow-y-auto pb-4 xl:flex xl:pb-0`}
+          >
             <IntelPanel intel={tarpit.intel} enrichment={tarpit.enrichment} serverBase={HTTP} />
           </aside>
         </div>
 
-        <footer className="hidden shrink-0 items-center gap-3 pt-3 text-[11px] text-faint lg:flex">
+        <footer className="hidden shrink-0 items-center gap-3 pt-4 text-[11px] text-faint xl:flex">
           <span>Use headphones to prevent the persona from hearing its own voice.</span>
           <span className="ml-auto font-mono">
             {tarpit.health?.models.stt || 'STT'} / {tarpit.health?.models.llm || 'LLM'} / {tarpit.health?.models.tts || 'TTS'}
@@ -186,20 +216,28 @@ function connectionLabel(conn: string) {
 }
 
 function MobileTab({
+  id,
+  controls,
   active,
   onClick,
   children,
 }: {
+  id: string;
+  controls: string;
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
+      id={id}
+      role="tab"
       type="button"
-      aria-pressed={active}
+      aria-selected={active}
+      aria-controls={controls}
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
-      className={`rounded-md px-2 py-2 text-xs font-semibold ${active ? 'bg-accent text-white' : 'text-muted'}`}
+      className={`min-h-10 rounded-md px-3 py-2 text-xs font-semibold ${active ? 'bg-accent text-white' : 'text-muted hover:text-text'}`}
     >
       {children}
     </button>
