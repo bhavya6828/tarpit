@@ -179,10 +179,31 @@ Measured on an M-series Mac, warm connections:
 | ElevenLabs first audio | ~440 ms (turbo, HTTP) |
 | **Perceived first response** | **~250 ms** |
 
-Perceived latency is far below the sum because a **filler is spoken immediately** —
-`"hold on now…"` enters the TTS socket before the model has written anything. LLM
-tokens then stream into the same socket, buffered to word boundaries so a word is
-never split across TTS chunks.
+Perceived latency is far below the sum because a **filler is spoken immediately**.
+`"hold on now"` enters the TTS socket before the model has written anything, which
+buys the time the reply takes to arrive.
+
+### 5.3.1 How text reaches the voice engine
+
+A voice engine plans intonation across the span of text it is handed. Hand it less
+and it plans less. This is the single largest determinant of whether output reads as
+speech or as dictation, and it is a latency tradeoff:
+
+| Granularity | First audio | Result |
+|---|---|---|
+| Word fragments (~12 chars) | fastest | Dictation. Each fragment carries its own stress pattern and trailing pause. Rejected. |
+| Clause | +0 ms | Natural within a clause, slightly disjointed across them. |
+| **Whole reply** | **+250 ms** | **Best prosody. What ships.** |
+
+The whole reply is buffered before synthesis. The filler covers the wait, so the
+added latency is not audible to the caller. `TTS_GRANULARITY` may be set to `clause`
+to trade prosody back for latency on a slow link.
+
+Clause detection remains implemented and is used at `clause` granularity. It requires
+real lookahead: text arrives one character at a time, so a terminator at the end of
+the buffer has no following character yet. It waits for the next character, requires
+whitespace after the terminator, and guards abbreviations and initials so `Mr.
+Biscuits` and `I.R.S.` are not split.
 
 ### 5.4 Tactical adaptation
 
@@ -409,13 +430,32 @@ Synthetic voice reads as fake mostly for reasons that are not the model.
 | Line levelling | compressor, ratio 6, −28 dB | phone lines are aggressively AGC'd |
 | Noise floor | brown-noise bed at 0.006 gain | digital silence between words is unnatural |
 | Room tone | per-persona ambience loop, gain 0.075 | Harold says "let me turn the television down" |
-| Model | `eleven_turbo_v2_5` over flash | +116 ms TTFB, audibly better prosody |
+| Model | see below | expressiveness against latency |
+| Emotional direction | audio tags in generated text | inferred emotion is flat; stated emotion is not |
 
 Ambience is mixed **before** the telephony filter, because the caller hears the room
 down the same line. The chain is bypassable at runtime (`PHONE LINE` toggle) by
 widening the filters to transparency rather than rewiring the graph.
 
-On the Twilio path this colouration is redundant — 8 kHz mu-law does it for real.
+On the Twilio path this colouration is redundant, because 8 kHz mu-law does it for
+real.
+
+### 12.1 Model selection
+
+| Model | TTFB | Notes |
+|---|---|---|
+| `eleven_flash_v2_5` | ~325 ms | Fastest, flattest. |
+| `eleven_turbo_v2_5` | ~425 ms | Good prosody, no emotional range. |
+| `eleven_v3` | ~700 ms | Most expressive. Supports audio tags. |
+| `eleven_multilingual_v2` | ~1600 ms | Too slow for conversation. |
+
+`eleven_v3` accepts inline **audio tags** such as `[confused]`, `[nervously]` and
+`[sighs]`. A model asked to sound frightened without being told to will read the words
+accurately and flatly, because nothing in the text says otherwise. Tags are how
+emotion is specified rather than hoped for, and personas emit them inline.
+
+Tags are stripped before a line is written to the transcript or indexed, so the intel
+record stays clean.
 
 ---
 
